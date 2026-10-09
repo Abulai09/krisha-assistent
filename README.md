@@ -1,36 +1,71 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Almaty Deal Finder
 
-## Getting Started
+Бесплатный аналитический сервис для поиска потенциально недооценённых квартир в Алматы. Для каждой квартиры
+он оценивает рыночную стоимость по похожим объявлениям, считает скидку к рынку, Deal Score, уверенность
+оценки и риски — и объясняет, откуда взялись цифры.
 
-First, run the development server:
+> **Статус источника данных.** Пользовательское соглашение Krisha.kz запрещает автоматизированный сбор
+> объявлений без письменного разрешения АО «Колёса», публичного API нет. Поэтому сервис **не собирает данные
+> с Krisha.kz**. Сейчас работают импорт CSV/JSON (для данных, на которые у вас есть права) и синтетические
+> тестовые данные, которые всегда помечены в интерфейсе. Подробнее — [docs/data-sources.md](docs/data-sources.md).
+
+## Что работает
+
+| Функция | Статус |
+| --- | --- |
+| Оценка рыночной стоимости по аналогам, скидка, разница, Deal Score, уверенность, риски | ✅ |
+| Объяснение каждой оценки, аналоги, предупреждения, формула с числами | ✅ |
+| Каталог с фильтрами (13 параметров) и двумя режимами сортировки | ✅ |
+| Обзор (Dashboard), страница квартиры, аналитика по районам | ✅ |
+| История цен и график | ✅ |
+| Фоновый worker: расписание, очередь ручных запусков, повторы, тайм-ауты, блокировка, журнал | ✅ |
+| Импорт CSV/JSON (CLI и загрузка в разделе «Управление») | ✅ |
+| Синтетические тестовые данные | ✅ |
+| Получение данных с Krisha.kz | ⏸ ждёт разрешения — есть адаптер-заготовка `KrishaApiSource` |
+| Динамика рынка | ⏳ появится, когда накопится ≥ 3 месяцев наблюдений |
+
+## Быстрый старт
+
+Нужны Node.js 22+, Docker Desktop.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install                 # зависимости + генерация Prisma Client
+cp .env.example .env        # затем заполните ADMIN_TOKEN и SESSION_SECRET (команда генерации — в файле)
+npm run db:up               # PostgreSQL 17 в Docker на localhost:5434 (+ тестовая база)
+npm run db:migrate          # применить миграции
+npm run seed                # загрузить синтетические тестовые данные
+npm run dev                 # сайт на http://localhost:3100
+npm run worker              # в отдельном терминале: фоновые обновления 24/7
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Команды
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Команда | Что делает |
+| --- | --- |
+| `npm run dev` / `build` / `start` | Сайт (порт 3100) |
+| `npm run worker` | Постоянный фоновый процесс: плановые обновления + ручные запуски из очереди |
+| `npm run worker:once` | Один цикл worker'а — для cron / Планировщика заданий |
+| `npm run collect -- synthetic` | Обновить один источник |
+| `npm run import -- путь/к/файлу.csv` | Импортировать CSV/JSON |
+| `npm run revalue` | Пересчитать оценки без загрузки данных |
+| `npm run seed` | То же, что `collect -- synthetic` |
+| `npm run typecheck` / `lint` | Проверка типов / линтер |
+| `npm test` | Unit-тесты |
+| `npm run test:integration` | Интеграционные тесты (тестовая БД `deal_finder_test`) |
+| `npm run test:e2e` | E2E Playwright (собирает приложение, порт 3101, тестовая БД, установленный Chrome) |
+| `npm run db:migrate:dev -- --name <имя>` | Создать миграцию после изменения `prisma/schema.prisma` |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Один тест: `npx vitest run tests/unit/money.test.ts -t "10,64%"`, один E2E: `npx playwright test -g "фильтр"`.
 
-## Learn More
+## Документация
 
-To learn more about Next.js, take a look at the following resources:
+- [docs/architecture.md](docs/architecture.md) — устройство системы и границы модулей
+- [docs/valuation.md](docs/valuation.md) — алгоритм оценки (кратко; в интерфейсе — страница «Как считаем»)
+- [docs/data-sources.md](docs/data-sources.md) — источники данных, формат импорта, подключение API
+- [docs/deployment.md](docs/deployment.md) — запуск 24/7, расписание, бесплатный хостинг, бэкапы
+- [docs/adr/0001-krisha-data-access.md](docs/adr/0001-krisha-data-access.md) — решение о доступе к данным Krisha.kz
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Важно
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Оценки основаны на **ценах предложения**, а не на ценах сделок. Потенциальная разница — не прибыль: не учтены
+торг, расходы на сделку, ремонт, налоги и юридические риски. Юридическая чистота квартир не проверяется.

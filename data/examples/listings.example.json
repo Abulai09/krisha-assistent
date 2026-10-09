@@ -1,0 +1,20 @@
+{
+  "listings": [
+    {
+      "externalId": "EX-3",
+      "url": "https://example.com/listing/3",
+      "priceKzt": 55000000,
+      "totalArea": 72.4,
+      "rooms": 3,
+      "district": "MEDEU",
+      "microdistrict": "Самал-2",
+      "complexName": "ЖК Пример-2",
+      "buildingType": "BRICK",
+      "yearBuilt": 2012,
+      "floor": 7,
+      "floorsTotal": 9,
+      "condition": "GOOD",
+      "updatedAt": "2026-09-30"
+    }
+  ]
+}

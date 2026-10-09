@@ -1,0 +1,281 @@
+// Схема Almaty Property Deal Finder.
+// Деньги хранятся в целых тенге (BigInt), площади — Decimal. Float для денег не используется.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum SourceKind {
+  SYNTHETIC
+  FILE_IMPORT
+  API
+}
+
+enum SourceStatus {
+  NOT_CONNECTED
+  CONNECTED
+  ERROR
+  DISABLED
+}
+
+enum ListingStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum District {
+  ALATAU
+  ALMALY
+  AUEZOV
+  BOSTANDYK
+  ZHETYSU
+  MEDEU
+  NAURYZBAY
+  TURKSIB
+}
+
+enum BuildingType {
+  PANEL
+  BRICK
+  MONOLITH
+  OTHER
+}
+
+enum ApartmentCondition {
+  ROUGH_FINISH
+  NEEDS_REPAIR
+  AVERAGE
+  GOOD
+  EXCELLENT
+}
+
+enum SellerType {
+  OWNER
+  AGENT
+  DEVELOPER
+}
+
+enum ValuationStatus {
+  OK
+  INSUFFICIENT_DATA
+  INVALID_LISTING
+}
+
+enum ComparableScope {
+  SAME_COMPLEX
+  SAME_MICRODISTRICT
+  SAME_DISTRICT_SIMILAR_BUILDING
+  SAME_DISTRICT
+}
+
+enum ConfidenceLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum RunTrigger {
+  SCHEDULED
+  MANUAL
+  CLI
+}
+
+enum RunStatus {
+  QUEUED
+  RUNNING
+  SUCCESS
+  PARTIAL
+  FAILED
+}
+
+model DataSource {
+  id                 String       @id @default(cuid())
+  key                String       @unique
+  name               String
+  kind               SourceKind
+  status             SourceStatus @default(NOT_CONNECTED)
+  // true — данные сгенерированы и не являются реальными объявлениями.
+  isSynthetic        Boolean      @default(false)
+  // true — каждый запуск возвращает полный срез, значит отсутствие объявления = неактивно.
+  providesFullSnapshot Boolean    @default(false)
+  statusMessage      String?
+  lastSuccessAt      DateTime?
+  lastErrorAt        DateTime?
+  lastError          String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  listings Listing[]
+  runs     CollectionRun[]
+}
+
+model Listing {
+  id              String         @id @default(cuid())
+  sourceId        String
+  externalId      String
+  url             String?
+  status          ListingStatus  @default(ACTIVE)
+
+  publishedAt     DateTime?
+  sourceUpdatedAt DateTime?
+  firstSeenAt     DateTime       @default(now())
+  lastSeenAt      DateTime       @default(now())
+  deactivatedAt   DateTime?
+
+  priceKzt        BigInt
+  totalArea       Decimal        @db.Decimal(7, 2)
+  livingArea      Decimal?       @db.Decimal(7, 2)
+  kitchenArea     Decimal?       @db.Decimal(7, 2)
+  rooms           Int
+
+  district        District
+  microdistrict   String?
+  address         String?
+  complexName     String?
+  // Нормализованное название ЖК для поиска аналогов (нижний регистр, без кавычек и «ЖК»).
+  complexKey      String?
+  buildingType    BuildingType?
+  yearBuilt       Int?
+  floor           Int?
+  floorsTotal     Int?
+  condition       ApartmentCondition?
+  ceilingHeight   Decimal?       @db.Decimal(4, 2)
+  sellerType      SellerType?
+  furnished       Boolean?
+  description     String?
+
+  // Отпечаток квартиры для поиска дубликатов между объявлениями.
+  fingerprint     String
+  duplicateOfId   String?
+  // Хеш нормализованных полей: позволяет не перезаписывать неизменившиеся объявления.
+  contentHash     String
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  source        DataSource            @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  duplicateOf   Listing?              @relation("Duplicates", fields: [duplicateOfId], references: [id], onDelete: SetNull)
+  duplicates    Listing[]             @relation("Duplicates")
+  priceHistory  ListingPriceHistory[]
+  valuation     Valuation?
+  usedAsComparable ValuationComparable[]
+
+  @@unique([sourceId, externalId])
+  @@index([status, district, rooms])
+  @@index([fingerprint])
+  @@index([complexKey])
+  @@index([lastSeenAt])
+}
+
+model ListingPriceHistory {
+  id              String   @id @default(cuid())
+  listingId       String
+  priceKzt        BigInt
+  observedAt      DateTime @default(now())
+  collectionRunId String?
+
+  listing       Listing        @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  collectionRun CollectionRun? @relation(fields: [collectionRunId], references: [id], onDelete: SetNull)
+
+  @@index([listingId, observedAt])
+}
+
+// Текущая оценка объявления. Пересчитывается целиком при каждом обновлении.
+model Valuation {
+  id                    String          @id @default(cuid())
+  listingId             String          @unique
+  status                ValuationStatus
+  method                String
+  valuedAt              DateTime        @default(now())
+
+  listingPriceKzt       BigInt
+  pricePerSqm           BigInt?
+  estimatedPricePerSqm  BigInt?
+  marketValue           BigInt?
+  marketValueLow        BigInt?
+  marketValueHigh       BigInt?
+  potentialDifference   BigInt?
+  // Скидка относительно рынка в процентах (положительная = дешевле рынка).
+  discountPercent       Decimal?        @db.Decimal(6, 2)
+
+  comparablesCount      Int             @default(0)
+  comparableScope       ComparableScope?
+  confidence            Int?
+  confidenceLevel       ConfidenceLevel?
+  dealScore             Int?
+  riskLevel             RiskLevel?
+  // Коды предупреждений (см. src/domain/valuation/warnings.ts).
+  warnings              String[]
+  // Структурированное объяснение: факторы «за» и «против», недостающие поля, отличия от аналогов.
+  explanation           Json
+
+  listing     Listing               @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  comparables ValuationComparable[]
+
+  @@index([status, dealScore])
+  @@index([status, discountPercent])
+}
+
+model ValuationComparable {
+  valuationId         String
+  comparableListingId String
+  pricePerSqm         BigInt
+  similarity          Decimal @db.Decimal(5, 4)
+  excludedAsOutlier   Boolean @default(false)
+
+  valuation  Valuation @relation(fields: [valuationId], references: [id], onDelete: Cascade)
+  comparable Listing   @relation(fields: [comparableListingId], references: [id], onDelete: Cascade)
+
+  @@id([valuationId, comparableListingId])
+  @@index([comparableListingId])
+}
+
+model CollectionRun {
+  id                 String     @id @default(cuid())
+  sourceId           String
+  trigger            RunTrigger
+  status             RunStatus
+  requestedAt        DateTime   @default(now())
+  startedAt          DateTime?
+  finishedAt         DateTime?
+
+  fetchedCount       Int        @default(0)
+  createdCount       Int        @default(0)
+  updatedCount       Int        @default(0)
+  unchangedCount     Int        @default(0)
+  invalidCount       Int        @default(0)
+  deactivatedCount   Int        @default(0)
+  valuedCount        Int        @default(0)
+
+  // Для импорта файла из админки: путь к сохранённому файлу во входящей папке.
+  inputFile          String?
+  errorMessage       String?
+  // Первые N ошибок валидации/обработки для диагностики.
+  errorSamples       Json?
+
+  source       DataSource            @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  priceChanges ListingPriceHistory[]
+
+  @@index([sourceId, status])
+  @@index([requestedAt])
+}
+
+// Сигнал «worker жив». Одна строка на процесс worker'а.
+model WorkerHeartbeat {
+  id          String   @id
+  pid         Int
+  startedAt   DateTime
+  lastBeatAt  DateTime
+  currentTask String?
+}

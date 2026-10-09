@@ -1,0 +1,3 @@
+externalId,url,city,dealType,propertyType,publishedAt,updatedAt,priceKzt,totalArea,livingArea,kitchenArea,rooms,district,microdistrict,address,complexName,buildingType,yearBuilt,floor,floorsTotal,condition,ceilingHeight,sellerType,furnished,description
+EX-1,https://example.com/listing/1,Алматы,продажа,квартира,2026-09-20,2026-09-28,42000000,60.5,34,12,2,Бостандыкский,Орбита-1,,ЖК «Пример»,монолитный,2018,5,12,хорошее,2.8,собственник,да,
+EX-2,,Алматы,продажа,квартира,2026-09-22,,"38 500 000","45,2",,,1,Ауэзовский р-н,Аксай-1,"ул. Примерная, 10",,панельный,1985,1,5,требует ремонта,,агент,,Пример строки без ссылки и с пропусками

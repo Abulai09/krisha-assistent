@@ -12,6 +12,13 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Сгенерированный код и служебные файлы инструментов.
+    "src/generated/**",
+    ".agents/**",
+    ".claude/**",
+    ".windsurf/**",
+    "test-results/**",
+    "playwright-report/**",
   ]),
 ]);
 
