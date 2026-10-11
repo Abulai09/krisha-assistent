@@ -2,8 +2,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import { PrismaClient } from "@/generated/prisma/client";
 import { getEnv } from "@/config/env";
-import { errorMessage } from "@/lib/utils/async";
-import { logger } from "@/lib/utils/logger";
 
 // Один PrismaClient на процесс. В dev Next.js перезагружает модули — храним экземпляр в globalThis,
 // чтобы не открывать новый пул соединений при каждом изменении файла.
@@ -22,16 +20,12 @@ export function databaseSchema(url: string): string {
 function createClient(): PrismaClient {
   const { DATABASE_URL } = getEnv();
   const schema = databaseSchema(DATABASE_URL);
-  const pool = new Pool({ connectionString: DATABASE_URL });
-  // Запросы Prisma адаптер сам дополняет схемой, а сырой SQL ($queryRaw) ищет таблицы по search_path.
-  // pg выполняет запросы клиента по очереди, поэтому SET успевает раньше первого запроса.
-  if (schema !== "public") {
-    pool.on("connect", (client) => {
-      client.query(`SET search_path TO "${schema}"`).catch((error: unknown) => {
-        logger.error("Не удалось выбрать схему БД", { schema, error: errorMessage(error) });
-      });
-    });
-  }
+  // Запросы Prisma адаптер сам дополняет схемой, а сырой SQL ($queryRaw) ищет таблицы по search_path —
+  // задаём его при открытии соединения (Supabase Session pooler этот параметр пропускает).
+  const pool = new Pool({
+    connectionString: DATABASE_URL,
+    options: schema === "public" ? undefined : `-c search_path=${schema}`,
+  });
   return new PrismaClient({ adapter: new PrismaPg(pool, { schema, disposeExternalPool: true }) });
 }
 
