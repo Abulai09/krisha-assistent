@@ -5,7 +5,7 @@ test("на телефоне фильтры свёрнуты, список вид
   await expect(page.getByLabel("Район")).toBeHidden();
   await expect(page.locator("article").first()).toBeVisible();
 
-  await page.locator("summary").getByText("Фильтры").click();
+  await page.locator("summary").getByText(/^Фильтры/).click();
   await expect(page.getByLabel("Район")).toBeVisible();
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

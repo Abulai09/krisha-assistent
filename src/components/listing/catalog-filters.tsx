@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { SlidersHorizontal } from "lucide-react";
+import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,10 +9,25 @@ import { DEFAULT_MIN_DISCOUNT, type CatalogFilters } from "@/lib/validation/cata
 import type { ComplexOption } from "@/server/services/listingQueryService";
 import { FiltersDisclosure } from "./filters-disclosure";
 
+/** Фильтры, которые нужны реже, — прячутся под «Ещё фильтры». */
+export const SECONDARY_FILTER_KEYS = [
+  "areaMin",
+  "areaMax",
+  "condition",
+  "complex",
+  "floor",
+  "yearMin",
+  "yearMax",
+  "published",
+  "scoreMin",
+  "confidence",
+  "risk",
+] as const satisfies readonly (keyof CatalogFilters)[];
+
 /**
- * Фильтры — обычная GET-форма: работает без JavaScript, а состояние живёт в URL,
- * поэтому подборку можно сохранить в закладки или отправить ссылкой.
- * На телефоне фильтры свёрнуты, чтобы список был виден сразу; на широком экране раскрыты.
+ * Фильтры — обычная GET-форма: работает без JavaScript, состояние живёт в URL
+ * (подборку можно сохранить в закладки). Сначала 4 главных вопроса покупателя —
+ * насколько дешевле, где, сколько комнат, за сколько; остальное — по запросу.
  */
 export function CatalogFiltersForm({
   filters,
@@ -24,6 +39,7 @@ export function CatalogFiltersForm({
   activeCount: number;
 }) {
   const discountValue = filters.discount === undefined ? String(DEFAULT_MIN_DISCOUNT) : String(filters.discount);
+  const secondaryActive = SECONDARY_FILTER_KEYS.filter((key) => filters[key] !== undefined).length;
 
   return (
     <FiltersDisclosure className="group rounded-xl border bg-card">
@@ -35,17 +51,18 @@ export function CatalogFiltersForm({
         <span className="text-sm text-muted-foreground group-open:hidden">Показать</span>
         <span className="hidden text-sm text-muted-foreground group-open:inline">Скрыть</span>
       </summary>
-      <form method="get" action="/listings" className="space-y-4 border-t px-4 pt-4 pb-4">
+      <form method="get" action="/listings" className="space-y-4 border-t p-4">
         <input type="hidden" name="mode" value={filters.mode} />
 
-        <Field label="Скидка к рынку от" htmlFor="discount">
+        <Field label="Дешевле рынка на" htmlFor="discount">
           <NativeSelect id="discount" name="discount" defaultValue={discountValue} className="w-full">
-            <NativeSelectOption value="any">Все объявления</NativeSelectOption>
-            {[0, 5, 8, 10, 15, 20].map((value) => (
+            {[5, 8, 10, 15, 20].map((value) => (
               <NativeSelectOption key={value} value={String(value)}>
-                {value}%{value === DEFAULT_MIN_DISCOUNT ? " (по умолчанию)" : ""}
+                {value}% и больше
               </NativeSelectOption>
             ))}
+            <NativeSelectOption value="0">Любая скидка</NativeSelectOption>
+            <NativeSelectOption value="any">Все объявления, включая без оценки</NativeSelectOption>
           </NativeSelect>
         </Field>
 
@@ -72,78 +89,91 @@ export function CatalogFiltersForm({
         </Field>
 
         <RangeField label="Цена, млн ₸" name="price" min={filters.priceMin} max={filters.priceMax} step="0.1" />
-        <RangeField label="Площадь, м²" name="area" min={filters.areaMin} max={filters.areaMax} step="1" />
 
-        <Field label="Deal Score от" htmlFor="scoreMin">
-          <Input id="scoreMin" name="scoreMin" type="number" inputMode="numeric" min={0} max={100} placeholder="0–100" defaultValue={filters.scoreMin} />
-        </Field>
+        <details className="group/more rounded-lg border" open={secondaryActive > 0}>
+          <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2 text-sm font-medium">
+            Ещё фильтры{secondaryActive > 0 ? ` (${secondaryActive})` : ""}
+            <ChevronDown className="size-4 text-muted-foreground transition-transform group-open/more:rotate-180" aria-hidden="true" />
+          </summary>
+          <div className="space-y-4 border-t p-3">
+            <RangeField label="Площадь, м²" name="area" min={filters.areaMin} max={filters.areaMax} step="1" />
 
-        <Field label="Состояние" htmlFor="condition">
-          <NativeSelect id="condition" name="condition" defaultValue={filters.condition ?? ""} className="w-full">
-            <NativeSelectOption value="">Любое</NativeSelectOption>
-            {CONDITIONS.map((condition) => (
-              <NativeSelectOption key={condition} value={condition}>
-                {CONDITION_LABELS[condition]}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </Field>
+            <Field label="Состояние" htmlFor="condition">
+              <NativeSelect id="condition" name="condition" defaultValue={filters.condition ?? ""} className="w-full">
+                <NativeSelectOption value="">Любое</NativeSelectOption>
+                {CONDITIONS.map((condition) => (
+                  <NativeSelectOption key={condition} value={condition}>
+                    {CONDITION_LABELS[condition]}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
 
-        <Field label="ЖК" htmlFor="complex">
-          <NativeSelect id="complex" name="complex" defaultValue={filters.complex ?? ""} className="w-full">
-            <NativeSelectOption value="">Любой</NativeSelectOption>
-            {complexes.map((complex) => (
-              <NativeSelectOption key={complex.key} value={complex.key}>
-                {complex.name} ({complex.count})
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </Field>
+            <Field label="Этаж" htmlFor="floor">
+              <NativeSelect id="floor" name="floor" defaultValue={filters.floor ?? ""} className="w-full">
+                <NativeSelectOption value="">Любой</NativeSelectOption>
+                <NativeSelectOption value="not_first">Не первый</NativeSelectOption>
+                <NativeSelectOption value="not_last">Не последний</NativeSelectOption>
+                <NativeSelectOption value="middle">Не первый и не последний</NativeSelectOption>
+              </NativeSelect>
+            </Field>
 
-        <Field label="Этаж" htmlFor="floor">
-          <NativeSelect id="floor" name="floor" defaultValue={filters.floor ?? ""} className="w-full">
-            <NativeSelectOption value="">Любой</NativeSelectOption>
-            <NativeSelectOption value="not_first">Не первый</NativeSelectOption>
-            <NativeSelectOption value="not_last">Не последний</NativeSelectOption>
-            <NativeSelectOption value="middle">Не первый и не последний</NativeSelectOption>
-          </NativeSelect>
-        </Field>
+            <Field label="ЖК" htmlFor="complex">
+              <NativeSelect id="complex" name="complex" defaultValue={filters.complex ?? ""} className="w-full">
+                <NativeSelectOption value="">Любой</NativeSelectOption>
+                {complexes.map((complex) => (
+                  <NativeSelectOption key={complex.key} value={complex.key}>
+                    {complex.name} ({complex.count})
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
 
-        <RangeField label="Год постройки" name="year" min={filters.yearMin} max={filters.yearMax} step="1" />
+            <RangeField label="Год постройки" name="year" min={filters.yearMin} max={filters.yearMax} step="1" />
 
-        <Field label="Уверенность оценки" htmlFor="confidence">
-          <NativeSelect id="confidence" name="confidence" defaultValue={filters.confidence ?? ""} className="w-full">
-            <NativeSelectOption value="">Любая</NativeSelectOption>
-            <NativeSelectOption value="MEDIUM">Средняя и высокая</NativeSelectOption>
-            <NativeSelectOption value="HIGH">Только высокая</NativeSelectOption>
-          </NativeSelect>
-        </Field>
+            <Field label="Опубликовано" htmlFor="published">
+              <NativeSelect id="published" name="published" defaultValue={filters.published ?? ""} className="w-full">
+                <NativeSelectOption value="">За всё время</NativeSelectOption>
+                <NativeSelectOption value="1">За сутки</NativeSelectOption>
+                <NativeSelectOption value="7">За неделю</NativeSelectOption>
+                <NativeSelectOption value="30">За месяц</NativeSelectOption>
+                <NativeSelectOption value="90">За 3 месяца</NativeSelectOption>
+              </NativeSelect>
+            </Field>
 
-        <Field label="Уровень риска" htmlFor="risk">
-          <NativeSelect id="risk" name="risk" defaultValue={filters.risk ?? ""} className="w-full">
-            <NativeSelectOption value="">Любой</NativeSelectOption>
-            <NativeSelectOption value="MEDIUM">Низкий и средний</NativeSelectOption>
-            <NativeSelectOption value="LOW">Только низкий</NativeSelectOption>
-          </NativeSelect>
-        </Field>
+            <fieldset className="space-y-3 border-t pt-3">
+              <legend className="sr-only">Надёжность оценки</legend>
+              <p className="text-xs text-muted-foreground">Надёжность оценки</p>
+              <Field label="Уверенность" htmlFor="confidence">
+                <NativeSelect id="confidence" name="confidence" defaultValue={filters.confidence ?? ""} className="w-full">
+                  <NativeSelectOption value="">Любая</NativeSelectOption>
+                  <NativeSelectOption value="MEDIUM">Средняя и высокая</NativeSelectOption>
+                  <NativeSelectOption value="HIGH">Только высокая</NativeSelectOption>
+                </NativeSelect>
+              </Field>
+              <Field label="Риск" htmlFor="risk">
+                <NativeSelect id="risk" name="risk" defaultValue={filters.risk ?? ""} className="w-full">
+                  <NativeSelectOption value="">Любой</NativeSelectOption>
+                  <NativeSelectOption value="MEDIUM">Низкий и средний</NativeSelectOption>
+                  <NativeSelectOption value="LOW">Только низкий</NativeSelectOption>
+                </NativeSelect>
+              </Field>
+              <Field label="Deal Score от" htmlFor="scoreMin">
+                <Input id="scoreMin" name="scoreMin" type="number" inputMode="numeric" min={0} max={100} placeholder="0–100" defaultValue={filters.scoreMin} />
+              </Field>
+            </fieldset>
+          </div>
+        </details>
 
-        <Field label="Опубликовано" htmlFor="published">
-          <NativeSelect id="published" name="published" defaultValue={filters.published ?? ""} className="w-full">
-            <NativeSelectOption value="">За всё время</NativeSelectOption>
-            <NativeSelectOption value="1">За сутки</NativeSelectOption>
-            <NativeSelectOption value="7">За неделю</NativeSelectOption>
-            <NativeSelectOption value="30">За месяц</NativeSelectOption>
-            <NativeSelectOption value="90">За 3 месяца</NativeSelectOption>
-          </NativeSelect>
-        </Field>
-
-        <div className="flex gap-2 pt-1">
+        <div className="flex gap-2">
           <Button type="submit" className="flex-1">
             Показать
           </Button>
-          <Button asChild variant="outline">
-            <Link href={filters.mode === "discount" ? "/listings?mode=discount" : "/listings"}>Сбросить</Link>
-          </Button>
+          {activeCount > 0 || filters.discount !== undefined ? (
+            <Button asChild variant="ghost">
+              <Link href={filters.mode === "discount" ? "/listings?mode=discount" : "/listings"}>Сбросить</Link>
+            </Button>
+          ) : null}
         </div>
       </form>
     </FiltersDisclosure>

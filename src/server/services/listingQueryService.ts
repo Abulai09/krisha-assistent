@@ -10,7 +10,7 @@ import { getActiveRealm, realmIsSynthetic, type DataRealm } from "./dataRealmSer
 const MILLION = 1_000_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const catalogSelect = {
+export const catalogSelect = {
   id: true,
   url: true,
   priceKzt: true,

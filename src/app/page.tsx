@@ -1,33 +1,32 @@
 import { connection } from "next/server";
 import Link from "next/link";
 import { Suspense } from "react";
-import { DealScore, DiscountBadge, RiskBadge } from "@/components/listing/badges";
+import { ChevronDown } from "lucide-react";
+import { ListingCard } from "@/components/listing/listing-card";
 import { SOURCE_STATUS_LABELS } from "@/components/labels";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DISTRICT_LABELS } from "@/domain/listing/enums";
-import { formatArea, formatDateTime, formatKztShort, formatNumber, formatPercent } from "@/domain/format";
+import { formatDateTime, formatNumber, formatPercent, pluralize } from "@/domain/format";
 import { DEFAULT_MIN_DISCOUNT } from "@/lib/validation/catalogFilters";
 import { cn } from "@/lib/utils";
 import { getDashboardStats, type DashboardStats } from "@/server/services/dashboardService";
 
 const PERIODS = [
-  { days: 1, label: "Сутки" },
-  { days: 7, label: "Неделя" },
-  { days: 30, label: "Месяц" },
+  { days: 1, label: "сутки" },
+  { days: 7, label: "неделю" },
+  { days: 30, label: "месяц" },
 ] as const;
 
 export default function DashboardPage(props: PageProps<"/">) {
   return (
     <>
       <PageHeader
-        title="Обзор рынка"
-        description={`Квартиры в Алматы, цена которых на ${DEFAULT_MIN_DISCOUNT}% и более ниже расчётной рыночной стоимости по похожим объявлениям.`}
+        title="Выгодные квартиры в Алматы"
+        description={`Квартиры, которые дешевле похожих объявлений на ${DEFAULT_MIN_DISCOUNT}% и больше.`}
         actions={
           <Button asChild>
-            <Link href="/listings">Смотреть выгодные квартиры</Link>
+            <Link href="/listings">Все выгодные предложения</Link>
           </Button>
         }
       />
@@ -49,218 +48,170 @@ async function DashboardContent({ searchParams }: Pick<PageProps<"/">, "searchPa
       <div className="space-y-6">
         <EmptyState
           title="Данных пока нет"
-          description={
-            <>
-              Объявления появятся после первого обновления. Запустите <code className="font-mono">npm run worker</code>,
-              загрузите файл в разделе «Управление» или выполните <code className="font-mono">npm run seed</code> для
-              тестовых данных.
-            </>
-          }
+          description="Объявления появятся после первого обновления данных. Администратор может загрузить файл или запустить обновление в разделе «Управление»."
           action={
             <Button asChild variant="outline">
               <Link href="/admin">Перейти в управление</Link>
             </Button>
           }
         />
-        <SystemStatus stats={stats} />
+        <DataStatus stats={stats} />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <section aria-label="Ключевые показатели" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          label="Активных объявлений"
-          value={formatNumber(stats.activeCount)}
-          hint={`Оценено надёжно: ${formatNumber(stats.valuedCount)}`}
-        />
-        <KpiCard
-          label={`Потенциально выгодных (от ${DEFAULT_MIN_DISCOUNT}%)`}
-          value={formatNumber(stats.dealsCount)}
-          hint={
-            <Link href="/listings" className="underline underline-offset-2">
-              Открыть рейтинг
-            </Link>
-          }
-          accent
-        />
-        <KpiCard
-          label="Новых объявлений"
-          value={formatNumber(stats.newCount)}
-          hint={<PeriodSwitch current={period} />}
-        />
-        <KpiCard
-          label="Отклонение от рынка"
-          value={stats.medianDiscount === null ? "—" : signedPercent(stats.medianDiscount)}
-          hint={stats.averageDiscount === null ? "Нет оценок" : `Медиана; среднее ${signedPercent(stats.averageDiscount)}`}
-        />
+    <div className="space-y-8">
+      <SummaryStrip stats={stats} period={period} />
+
+      <section aria-labelledby="latest-deals" className="space-y-3">
+        <h2 id="latest-deals" className="font-semibold">
+          Новые выгодные предложения
+        </h2>
+        {stats.latestDeals.length === 0 ? (
+          <EmptyState
+            title="Выгодных предложений пока нет"
+            description={`Сейчас нет квартир дешевле рынка на ${DEFAULT_MIN_DISCOUNT}% с надёжной оценкой. Загляните после следующего обновления.`}
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {stats.latestDeals.map((listing) => (
+              <ListingCard key={listing.id} listing={listing} />
+            ))}
+          </div>
+        )}
       </section>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <section className="min-w-0 lg:col-span-2" aria-labelledby="latest-deals">
-          <div className="mb-3 flex items-baseline justify-between">
-            <h2 id="latest-deals" className="font-semibold">
-              Последние найденные предложения
-            </h2>
-            <Link href="/listings?mode=discount" className="text-sm text-muted-foreground hover:text-foreground">
-              Все по скидке →
-            </Link>
-          </div>
-          {stats.latestDeals.length === 0 ? (
-            <EmptyState
-              title="Выгодных предложений пока нет"
-              description={`Ни одно объявление сейчас не дешевле рынка на ${DEFAULT_MIN_DISCOUNT}% с надёжной оценкой.`}
-            />
-          ) : (
-            <ul className="divide-y rounded-xl border">
-              {stats.latestDeals.map((deal) => (
-                <li key={deal.id}>
-                  <Link
-                    href={`/listings/${deal.id}`}
-                    className="flex items-start gap-4 px-4 py-3 transition-colors hover:bg-muted/50"
-                  >
-                    <div className="min-w-0 flex-1 space-y-1.5">
-                      <p className="font-medium">
-                        {deal.rooms}-комн., {formatArea(deal.totalArea.toString())} · {DISTRICT_LABELS[deal.district]} р-н
-                      </p>
-                      <p className="truncate text-sm text-muted-foreground">
-                        {deal.complexName ?? "ЖК не указан"} · найдено {formatDateTime(deal.firstSeenAt)}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <DiscountBadge percent={deal.valuation?.discountPercent ? Number(deal.valuation.discountPercent) : null} />
-                        <RiskBadge level={deal.valuation?.riskLevel ?? null} />
-                      </div>
-                    </div>
-                    <div className="tabular flex shrink-0 flex-col items-end gap-1 text-right">
-                      <p className="font-semibold">{formatKztShort(deal.priceKzt)}</p>
-                      {deal.valuation?.marketValue && (
-                        <p className="text-xs text-muted-foreground">рынок ≈ {formatKztShort(deal.valuation.marketValue)}</p>
-                      )}
-                      <DealScore score={deal.valuation?.dealScore ?? null} />
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-        <SystemStatus stats={stats} />
-      </div>
+      <DataStatus stats={stats} />
     </div>
   );
 }
 
-function KpiCard({ label, value, hint, accent }: { label: string; value: string; hint: React.ReactNode; accent?: boolean }) {
+/** Ключевые цифры одной строкой вместо четырёх отдельных плиток. */
+function SummaryStrip({ stats, period }: { stats: DashboardStats; period: number }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardDescription>{label}</CardDescription>
-        <CardTitle className={cn("tabular text-3xl font-semibold", accent && "text-positive")}>{value}</CardTitle>
-      </CardHeader>
-      <CardContent className="text-sm text-muted-foreground">{hint}</CardContent>
-    </Card>
+    <section aria-label="Ключевые показатели" className="grid grid-cols-1 divide-y rounded-xl border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+      <Stat
+        value={formatNumber(stats.dealsCount)}
+        label={pluralize(stats.dealsCount, ["выгодное предложение", "выгодных предложения", "выгодных предложений"])}
+        accent
+      >
+        дешевле рынка на {DEFAULT_MIN_DISCOUNT}% и больше
+      </Stat>
+      <Stat value={formatNumber(stats.activeCount)} label={pluralize(stats.activeCount, ["объявление в базе", "объявления в базе", "объявлений в базе"])}>
+        {stats.lastSuccessAt ? `обновлено ${formatDateTime(stats.lastSuccessAt)}` : "ещё не обновлялось"}
+      </Stat>
+      <Stat value={formatNumber(stats.newCount)} label="новых">
+        <span className="inline-flex flex-wrap gap-x-1" role="group" aria-label="Период">
+          за
+          {PERIODS.map((p) => (
+            <Link
+              key={p.days}
+              href={p.days === 7 ? "/" : `/?period=${p.days}`}
+              aria-current={p.days === period ? "true" : undefined}
+              className={cn("hover:text-foreground", p.days === period ? "font-medium text-foreground" : "underline underline-offset-2")}
+            >
+              {p.label}
+            </Link>
+          ))}
+        </span>
+      </Stat>
+    </section>
   );
 }
 
-function PeriodSwitch({ current }: { current: number }) {
+function Stat({ value, label, accent, children }: { value: string; label: string; accent?: boolean; children: React.ReactNode }) {
   return (
-    <span className="inline-flex gap-1" role="group" aria-label="Период">
-      {PERIODS.map((period) => (
-        <Link
-          key={period.days}
-          href={period.days === 7 ? "/" : `/?period=${period.days}`}
-          aria-current={period.days === current ? "true" : undefined}
-          className={cn(
-            "rounded px-1.5 py-0.5 hover:text-foreground",
-            period.days === current && "bg-muted font-medium text-foreground",
-          )}
-        >
-          {period.label}
-        </Link>
-      ))}
-    </span>
+    <div className="space-y-1 p-4">
+      <p className="flex items-baseline gap-2">
+        <span className={cn("tabular text-2xl font-semibold", accent && "text-positive")}>{value}</span>
+        <span className="text-sm">{label}</span>
+      </p>
+      <p className="text-xs text-muted-foreground">{children}</p>
+    </div>
   );
 }
 
-function SystemStatus({ stats }: { stats: DashboardStats }) {
+/** Технические подробности — для тех, кому важно, откуда данные. Свёрнуто по умолчанию. */
+function DataStatus({ stats }: { stats: DashboardStats }) {
   const worker = stats.worker;
   const workerText =
     worker.state === "RUNNING"
       ? worker.currentTask
-        ? `Работает: ${worker.currentTask.toLowerCase()}`
-        : "Работает, ожидает следующего запуска"
+        ? `работает: ${worker.currentTask.toLowerCase()}`
+        : "работает"
       : worker.state === "STOPPED"
-        ? `Остановлен (последний сигнал ${formatDateTime(worker.lastBeatAt!)})`
-        : "Ещё не запускался";
+        ? `остановлено (последний сигнал ${formatDateTime(worker.lastBeatAt!)})`
+        : "ещё не запускалось";
+  const problems = stats.sources.filter((s) => s.status === "ERROR").length + (worker.state === "RUNNING" ? 0 : 1);
 
   return (
-    <section aria-labelledby="system-status">
-      <h2 id="system-status" className="mb-3 font-semibold">
-        Состояние данных
-      </h2>
-      <Card size="sm">
-        <CardContent className="space-y-4 text-sm">
-          <StatusRow label="Последнее успешное обновление">
-            {stats.lastSuccessAt ? formatDateTime(stats.lastSuccessAt) : "Не было"}
-          </StatusRow>
-          <StatusRow label="Фоновый процесс">
-            <StatusDot ok={worker.state === "RUNNING"} />
-            {workerText}
-          </StatusRow>
-          <div className="space-y-2">
-            <p className="text-muted-foreground">Источники данных</p>
-            {stats.sources.length === 0 && <p>Источники ещё не зарегистрированы — запустите worker.</p>}
-            <ul className="space-y-2">
+    <details className="group rounded-xl border">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm">
+        <span>
+          <span className="font-medium">Состояние данных</span>
+          <span className="text-muted-foreground">
+            {" · "}
+            {problems > 0 ? "требует внимания" : "всё работает"}
+          </span>
+        </span>
+        <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+      </summary>
+      <dl className="grid grid-cols-1 gap-x-6 gap-y-3 border-t p-4 text-sm sm:grid-cols-2">
+        <StatusRow label="Последнее успешное обновление">
+          {stats.lastSuccessAt ? formatDateTime(stats.lastSuccessAt) : "не было"}
+        </StatusRow>
+        <StatusRow label="Фоновое обновление">{workerText}</StatusRow>
+        <StatusRow label="Отклонение цен от рынка">
+          {stats.medianDiscount === null
+            ? "нет оценок"
+            : `медиана ${signedPercent(stats.medianDiscount)}, среднее ${signedPercent(stats.averageDiscount ?? 0)}`}
+        </StatusRow>
+        <StatusRow label="Надёжно оценено">
+          {formatNumber(stats.valuedCount)} из {formatNumber(stats.activeCount)}
+        </StatusRow>
+        <div className="sm:col-span-2">
+          <dt className="text-muted-foreground">Источники данных</dt>
+          <dd>
+            <ul className="mt-1 space-y-1">
+              {stats.sources.length === 0 && <li>Источники ещё не зарегистрированы.</li>}
               {stats.sources.map((source) => (
-                <li key={source.key} className="rounded-lg bg-muted/50 p-2.5">
-                  <p className="flex items-center gap-1.5 font-medium">
-                    <StatusDot ok={source.status === "CONNECTED"} warn={source.status === "NOT_CONNECTED"} />
-                    {source.name}
-                    <span className="font-normal text-muted-foreground">— {SOURCE_STATUS_LABELS[source.status]}</span>
-                  </p>
-                  {source.statusMessage && <p className="mt-0.5 text-xs text-muted-foreground">{source.statusMessage}</p>}
+                <li key={source.key}>
+                  {source.name} — {SOURCE_STATUS_LABELS[source.status].toLowerCase()}
+                  {source.statusMessage && <span className="block text-xs text-muted-foreground">{source.statusMessage}</span>}
                 </li>
               ))}
             </ul>
-          </div>
-        </CardContent>
-      </Card>
-    </section>
+          </dd>
+        </div>
+      </dl>
+    </details>
   );
 }
 
 function StatusRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-muted-foreground">{label}</p>
-      <p className="flex items-center gap-1.5 font-medium">{children}</p>
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd>{children}</dd>
     </div>
   );
 }
 
-function StatusDot({ ok, warn }: { ok: boolean; warn?: boolean }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn("inline-block size-2 shrink-0 rounded-full", ok ? "bg-positive" : warn ? "bg-warning" : "bg-destructive")}
-    />
-  );
-}
-
+/** «−2,0%» = цены в среднем ниже рынка (так же, как скидка в карточках). */
 function signedPercent(value: number) {
   return value > 0 ? `−${formatPercent(value)}` : value < 0 ? `+${formatPercent(-value)}` : formatPercent(0);
 }
 
 function DashboardSkeleton() {
   return (
-    <div className="space-y-6" aria-busy="true" aria-label="Загрузка">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 4 }, (_, i) => (
-          <Skeleton key={i} className="h-32 rounded-xl" />
+    <div className="space-y-8" aria-busy="true" aria-label="Загрузка">
+      <Skeleton className="h-24 rounded-xl" />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 3 }, (_, i) => (
+          <Skeleton key={i} className="h-56 rounded-xl" />
         ))}
       </div>
-      <Skeleton className="h-80 rounded-xl" />
     </div>
   );
 }

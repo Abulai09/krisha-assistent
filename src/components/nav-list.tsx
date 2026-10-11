@@ -6,7 +6,6 @@ const NAV_ITEMS = [
   { href: "/listings", label: "Квартиры" },
   { href: "/analytics", label: "Аналитика" },
   { href: "/methodology", label: "Как считаем" },
-  { href: "/admin", label: "Управление" },
 ] as const;
 
 function isActive(href: string, pathname: string | null) {
@@ -27,7 +26,6 @@ export function NavList({ activePath }: { activePath: string | null }) {
             aria-current={active ? "page" : undefined}
             className={cn(
               "rounded-md px-2 py-1.5 text-sm whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground",
-              item.href === "/admin" && "sm:ml-auto",
               active && "bg-muted font-medium text-foreground",
             )}
           >

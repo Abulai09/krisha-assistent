@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { DEFAULT_MIN_DISCOUNT } from "@/lib/validation/catalogFilters";
 import { getActiveRealm, realmIsSynthetic, type DataRealm } from "./dataRealmService";
 import { getWorkerState, type WorkerState } from "./heartbeatService";
+import { catalogSelect } from "./listingQueryService";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -95,17 +96,8 @@ function latestDeals(synthetic: boolean) {
       source: { isSynthetic: synthetic },
       valuation: { status: "OK", discountPercent: { gte: DEFAULT_MIN_DISCOUNT } },
     },
-    orderBy: [{ firstSeenAt: "desc" }, { id: "asc" }],
+    orderBy: [{ firstSeenAt: "desc" }, { valuation: { dealScore: { sort: "desc", nulls: "last" } } }, { id: "asc" }],
     take: 6,
-    select: {
-      id: true,
-      priceKzt: true,
-      totalArea: true,
-      rooms: true,
-      district: true,
-      complexName: true,
-      firstSeenAt: true,
-      valuation: { select: { discountPercent: true, dealScore: true, confidenceLevel: true, riskLevel: true, marketValue: true } },
-    },
+    select: catalogSelect,
   });
 }

@@ -20,8 +20,8 @@ import { listCatalog, listComplexOptions } from "@/server/services/listingQueryS
 export const metadata: Metadata = { title: "Квартиры" };
 
 const MODES = [
-  { value: "deal", label: "Самые выгодные", hint: "по Deal Score — скидка с учётом надёжности оценки и рисков" },
-  { value: "discount", label: "Дешевле рынка", hint: "самые дешёвые относительно рынка — по проценту скидки" },
+  { value: "deal", label: "Самые выгодные", title: "По Deal Score: скидка с учётом надёжности оценки и рисков" },
+  { value: "discount", label: "Самая большая скидка", title: "Самые дешёвые относительно рынка — по проценту скидки" },
 ] as const;
 
 export default function ListingsPage(props: PageProps<"/listings">) {
@@ -29,7 +29,7 @@ export default function ListingsPage(props: PageProps<"/listings">) {
     <>
       <PageHeader
         title="Квартиры"
-        description="Рейтинг потенциально недооценённых квартир. Скидка — отклонение цены от расчётной рыночной стоимости по похожим объявлениям."
+        description="Квартиры, которые дешевле похожих объявлений поблизости."
       />
       <Suspense fallback={<CatalogSkeleton />}>
         <Catalog searchParams={props.searchParams} />
@@ -52,13 +52,15 @@ async function Catalog({ searchParams }: Pick<PageProps<"/listings">, "searchPar
       </aside>
 
       <section aria-labelledby="results-heading" className="min-w-0 space-y-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <ModeTabs filters={filters} />
         <p id="results-heading" className="text-sm text-muted-foreground" aria-live="polite">
           {catalog.total === 0
             ? "Ничего не найдено"
             : `Найдено ${formatNumber(catalog.total)} ${pluralize(catalog.total, ["квартира", "квартиры", "квартир"])}`}
-          {minDiscount !== null && ` со скидкой от ${minDiscount}% к рынку`}
+          {minDiscount !== null && ` со скидкой от ${minDiscount}%`}
         </p>
+        </div>
 
         {catalog.realm === "empty" ? (
           <EmptyState
@@ -101,7 +103,7 @@ async function Catalog({ searchParams }: Pick<PageProps<"/listings">, "searchPar
 
 function ModeTabs({ filters }: { filters: CatalogFilters }) {
   return (
-    <nav aria-label="Сортировка" className="flex flex-col gap-2 sm:flex-row sm:items-center">
+    <nav aria-label="Сортировка">
       <div className="inline-flex rounded-lg bg-muted p-1" role="group">
         {MODES.map((mode) => {
           const active = filters.mode === mode.value;
@@ -110,6 +112,7 @@ function ModeTabs({ filters }: { filters: CatalogFilters }) {
               key={mode.value}
               href={`/listings${toCatalogQuery({ ...stringifyFilters(filters), mode: mode.value, page: undefined })}`}
               aria-current={active ? "true" : undefined}
+              title={mode.title}
               className={cn(
                 "rounded-md px-3 py-1.5 text-sm whitespace-nowrap transition-colors",
                 active ? "bg-background font-medium shadow-sm" : "text-muted-foreground hover:text-foreground",
@@ -120,7 +123,6 @@ function ModeTabs({ filters }: { filters: CatalogFilters }) {
           );
         })}
       </div>
-      <span className="text-xs text-muted-foreground">{MODES.find((m) => m.value === filters.mode)?.hint}</span>
     </nav>
   );
 }
