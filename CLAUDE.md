@@ -58,6 +58,8 @@ integration и E2E берут `DATABASE_URL_TEST` (БД создаёт `docker/i
 - Next.js 16 с `cacheComponents`: API отличаются от привычных — читать `node_modules/next/dist/docs/` (см. AGENTS.md).
   Каждое чтение БД/`searchParams`/`params`/`usePathname` — внутри `<Suspense>`; серверные компоненты с данными
   начинаются с `await connection()`. В конфиге `serverActions` лежит в `experimental`.
+- Схема БД берётся из `?schema=` в `DATABASE_URL` (`databaseSchema()` в `src/lib/db.ts`); сырой SQL пишется без
+  имени схемы — его находит `search_path`. Supabase — только Session pooler (advisory lock сессионный).
 - Prisma 7: клиент генерируется в `src/generated/prisma` (импорт `@/generated/prisma/client`), подключение через
   `@prisma/adapter-pg`, URL — в `prisma.config.ts`.
 - Каждый Server Action админки начинается с `requireAdmin()` (внутри `guarded()` в `src/app/admin/actions.ts`).
