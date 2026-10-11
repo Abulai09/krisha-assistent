@@ -51,3 +51,6 @@ next-env.d.ts
 # import inbox
 /data/inbox/*
 !/data/inbox/.gitkeep
+
+# логи worker по расписанию (scripts/worker-once.cmd)
+/logs
