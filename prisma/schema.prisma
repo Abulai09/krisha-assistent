@@ -14,6 +14,7 @@ enum SourceKind {
   SYNTHETIC
   FILE_IMPORT
   API
+  WEB
 }
 
 enum SourceStatus {
@@ -21,6 +22,11 @@ enum SourceStatus {
   CONNECTED
   ERROR
   DISABLED
+}
+
+enum DeactivationReason {
+  REMOVED // источник отдаёт полный срез, объявления в нём нет
+  STALE // давно не встречалось в выдаче (источник без полного среза)
 }
 
 enum ListingStatus {
@@ -100,75 +106,76 @@ enum RunStatus {
 }
 
 model DataSource {
-  id                 String       @id @default(cuid())
-  key                String       @unique
-  name               String
-  kind               SourceKind
-  status             SourceStatus @default(NOT_CONNECTED)
+  id                   String       @id @default(cuid())
+  key                  String       @unique
+  name                 String
+  kind                 SourceKind
+  status               SourceStatus @default(NOT_CONNECTED)
   // true — данные сгенерированы и не являются реальными объявлениями.
-  isSynthetic        Boolean      @default(false)
+  isSynthetic          Boolean      @default(false)
   // true — каждый запуск возвращает полный срез, значит отсутствие объявления = неактивно.
-  providesFullSnapshot Boolean    @default(false)
-  statusMessage      String?
-  lastSuccessAt      DateTime?
-  lastErrorAt        DateTime?
-  lastError          String?
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
+  providesFullSnapshot Boolean      @default(false)
+  statusMessage        String?
+  lastSuccessAt        DateTime?
+  lastErrorAt          DateTime?
+  lastError            String?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
 
   listings Listing[]
   runs     CollectionRun[]
 }
 
 model Listing {
-  id              String         @id @default(cuid())
-  sourceId        String
-  externalId      String
-  url             String?
-  status          ListingStatus  @default(ACTIVE)
+  id         String        @id @default(cuid())
+  sourceId   String
+  externalId String
+  url        String?
+  status     ListingStatus @default(ACTIVE)
 
-  publishedAt     DateTime?
-  sourceUpdatedAt DateTime?
-  firstSeenAt     DateTime       @default(now())
-  lastSeenAt      DateTime       @default(now())
-  deactivatedAt   DateTime?
+  publishedAt        DateTime?
+  sourceUpdatedAt    DateTime?
+  firstSeenAt        DateTime            @default(now())
+  lastSeenAt         DateTime            @default(now())
+  deactivatedAt      DateTime?
+  deactivationReason DeactivationReason?
 
-  priceKzt        BigInt
-  totalArea       Decimal        @db.Decimal(7, 2)
-  livingArea      Decimal?       @db.Decimal(7, 2)
-  kitchenArea     Decimal?       @db.Decimal(7, 2)
-  rooms           Int
+  priceKzt    BigInt
+  totalArea   Decimal  @db.Decimal(7, 2)
+  livingArea  Decimal? @db.Decimal(7, 2)
+  kitchenArea Decimal? @db.Decimal(7, 2)
+  rooms       Int
 
-  district        District
-  microdistrict   String?
-  address         String?
-  complexName     String?
+  district      District
+  microdistrict String?
+  address       String?
+  complexName   String?
   // Нормализованное название ЖК для поиска аналогов (нижний регистр, без кавычек и «ЖК»).
-  complexKey      String?
-  buildingType    BuildingType?
-  yearBuilt       Int?
-  floor           Int?
-  floorsTotal     Int?
-  condition       ApartmentCondition?
-  ceilingHeight   Decimal?       @db.Decimal(4, 2)
-  sellerType      SellerType?
-  furnished       Boolean?
-  description     String?
+  complexKey    String?
+  buildingType  BuildingType?
+  yearBuilt     Int?
+  floor         Int?
+  floorsTotal   Int?
+  condition     ApartmentCondition?
+  ceilingHeight Decimal?            @db.Decimal(4, 2)
+  sellerType    SellerType?
+  furnished     Boolean?
+  description   String?
 
   // Отпечаток квартиры для поиска дубликатов между объявлениями.
-  fingerprint     String
-  duplicateOfId   String?
+  fingerprint   String
+  duplicateOfId String?
   // Хеш нормализованных полей: позволяет не перезаписывать неизменившиеся объявления.
-  contentHash     String
+  contentHash   String
 
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  source        DataSource            @relation(fields: [sourceId], references: [id], onDelete: Restrict)
-  duplicateOf   Listing?              @relation("Duplicates", fields: [duplicateOfId], references: [id], onDelete: SetNull)
-  duplicates    Listing[]             @relation("Duplicates")
-  priceHistory  ListingPriceHistory[]
-  valuation     Valuation?
+  source           DataSource            @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  duplicateOf      Listing?              @relation("Duplicates", fields: [duplicateOfId], references: [id], onDelete: SetNull)
+  duplicates       Listing[]             @relation("Duplicates")
+  priceHistory     ListingPriceHistory[]
+  valuation        Valuation?
   usedAsComparable ValuationComparable[]
 
   @@unique([sourceId, externalId])
@@ -193,32 +200,32 @@ model ListingPriceHistory {
 
 // Текущая оценка объявления. Пересчитывается целиком при каждом обновлении.
 model Valuation {
-  id                    String          @id @default(cuid())
-  listingId             String          @unique
-  status                ValuationStatus
-  method                String
-  valuedAt              DateTime        @default(now())
+  id        String          @id @default(cuid())
+  listingId String          @unique
+  status    ValuationStatus
+  method    String
+  valuedAt  DateTime        @default(now())
 
-  listingPriceKzt       BigInt
-  pricePerSqm           BigInt?
-  estimatedPricePerSqm  BigInt?
-  marketValue           BigInt?
-  marketValueLow        BigInt?
-  marketValueHigh       BigInt?
-  potentialDifference   BigInt?
+  listingPriceKzt      BigInt
+  pricePerSqm          BigInt?
+  estimatedPricePerSqm BigInt?
+  marketValue          BigInt?
+  marketValueLow       BigInt?
+  marketValueHigh      BigInt?
+  potentialDifference  BigInt?
   // Скидка относительно рынка в процентах (положительная = дешевле рынка).
-  discountPercent       Decimal?        @db.Decimal(6, 2)
+  discountPercent      Decimal? @db.Decimal(6, 2)
 
-  comparablesCount      Int             @default(0)
-  comparableScope       ComparableScope?
-  confidence            Int?
-  confidenceLevel       ConfidenceLevel?
-  dealScore             Int?
-  riskLevel             RiskLevel?
+  comparablesCount Int              @default(0)
+  comparableScope  ComparableScope?
+  confidence       Int?
+  confidenceLevel  ConfidenceLevel?
+  dealScore        Int?
+  riskLevel        RiskLevel?
   // Коды предупреждений (см. src/domain/valuation/warnings.ts).
-  warnings              String[]
+  warnings         String[]
   // Структурированное объяснение: факторы «за» и «против», недостающие поля, отличия от аналогов.
-  explanation           Json
+  explanation      Json
 
   listing     Listing               @relation(fields: [listingId], references: [id], onDelete: Cascade)
   comparables ValuationComparable[]
@@ -242,27 +249,27 @@ model ValuationComparable {
 }
 
 model CollectionRun {
-  id                 String     @id @default(cuid())
-  sourceId           String
-  trigger            RunTrigger
-  status             RunStatus
-  requestedAt        DateTime   @default(now())
-  startedAt          DateTime?
-  finishedAt         DateTime?
+  id          String     @id @default(cuid())
+  sourceId    String
+  trigger     RunTrigger
+  status      RunStatus
+  requestedAt DateTime   @default(now())
+  startedAt   DateTime?
+  finishedAt  DateTime?
 
-  fetchedCount       Int        @default(0)
-  createdCount       Int        @default(0)
-  updatedCount       Int        @default(0)
-  unchangedCount     Int        @default(0)
-  invalidCount       Int        @default(0)
-  deactivatedCount   Int        @default(0)
-  valuedCount        Int        @default(0)
+  fetchedCount     Int @default(0)
+  createdCount     Int @default(0)
+  updatedCount     Int @default(0)
+  unchangedCount   Int @default(0)
+  invalidCount     Int @default(0)
+  deactivatedCount Int @default(0)
+  valuedCount      Int @default(0)
 
   // Для импорта файла из админки: путь к сохранённому файлу во входящей папке.
-  inputFile          String?
-  errorMessage       String?
+  inputFile    String?
+  errorMessage String?
   // Первые N ошибок валидации/обработки для диагностики.
-  errorSamples       Json?
+  errorSamples Json?
 
   source       DataSource            @relation(fields: [sourceId], references: [id], onDelete: Restrict)
   priceChanges ListingPriceHistory[]

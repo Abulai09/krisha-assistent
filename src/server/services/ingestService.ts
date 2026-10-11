@@ -40,7 +40,7 @@ export async function ingestListing(
 
     await tx.listing.update({
       where: { id: existing.id },
-      data: { ...listing, status: "ACTIVE", lastSeenAt: now, deactivatedAt: null },
+      data: { ...listing, status: "ACTIVE", lastSeenAt: now, deactivatedAt: null, deactivationReason: null },
     });
     if (existing.priceKzt !== listing.priceKzt) {
       await tx.listingPriceHistory.create({
@@ -58,7 +58,16 @@ export async function ingestListing(
 export async function deactivateMissingListings(sourceId: string, seenBefore: Date, now: Date): Promise<number> {
   const result = await db.listing.updateMany({
     where: { sourceId, status: "ACTIVE", lastSeenAt: { lt: seenBefore } },
-    data: { status: "INACTIVE", deactivatedAt: now },
+    data: { status: "INACTIVE", deactivatedAt: now, deactivationReason: "REMOVED" },
+  });
+  return result.count;
+}
+
+/** Источник без полного среза: объявление давно не встречалось в выдаче — убираем из активных, но не называем снятым. */
+export async function deactivateStaleListings(sourceId: string, seenBefore: Date, now: Date): Promise<number> {
+  const result = await db.listing.updateMany({
+    where: { sourceId, status: "ACTIVE", lastSeenAt: { lt: seenBefore } },
+    data: { status: "INACTIVE", deactivatedAt: now, deactivationReason: "STALE" },
   });
   return result.count;
 }

@@ -5,12 +5,13 @@ import { LOCK_KEYS, tryAcquireLock } from "@/lib/advisoryLock";
 import { db } from "@/lib/db";
 import { errorMessage, mapWithConcurrency, withRetry, withTimeout } from "@/lib/utils/async";
 import { logger } from "@/lib/utils/logger";
-import { InvalidImportFileError, SourceNotConnectedError, type ListingSource } from "@/server/sources/types";
+import { InvalidImportFileError, SourceBlockedError, SourceNotConnectedError, type ListingSource } from "@/server/sources/types";
 import { refreshDuplicates } from "./duplicateService";
-import { deactivateMissingListings, ingestListing, type IngestOutcome } from "./ingestService";
+import { deactivateMissingListings, deactivateStaleListings, ingestListing, type IngestOutcome } from "./ingestService";
 import { revalueAllListings } from "./valuationService";
 
 const FETCH_TIMEOUT_MS = 120_000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const FETCH_ATTEMPTS = 3;
 const FETCH_RETRY_BASE_MS = 2_000;
 const INGEST_CONCURRENCY = 4;
@@ -106,11 +107,16 @@ async function executeRun(options: RunCollectionOptions, now: Date, summary: Col
     if (status.availability === "NOT_CONNECTED") throw new SourceNotConnectedError(status.message);
 
     const rawListings = await withRetry(
-      () => withTimeout(source.fetchListings({ now }), FETCH_TIMEOUT_MS, `Источник «${source.name}»`),
+      () => withTimeout(source.fetchListings({ now }), source.fetchTimeoutMs ?? FETCH_TIMEOUT_MS, `Источник «${source.name}»`),
       {
         attempts: FETCH_ATTEMPTS,
         baseDelayMs: options.retryBaseDelayMs ?? FETCH_RETRY_BASE_MS,
-        isRetryable: (error) => !(error instanceof SourceNotConnectedError || error instanceof InvalidImportFileError),
+        isRetryable: (error) =>
+          !(
+            error instanceof SourceNotConnectedError ||
+            error instanceof InvalidImportFileError ||
+            error instanceof SourceBlockedError
+          ),
         onRetry: (error, attempt, delayMs) =>
           logger.warn("Повтор запроса к источнику", { source: source.key, attempt, delayMs, error: errorMessage(error) }),
       },
@@ -140,6 +146,10 @@ async function executeRun(options: RunCollectionOptions, now: Date, summary: Col
 
     if (source.providesFullSnapshot) {
       summary.deactivated = await deactivateMissingListings(dataSource.id, now, now);
+    } else if (source.staleAfterDays && valid.size > 0) {
+      // Пустой ответ подозрителен (вёрстка сменилась, блокировка) — тогда ничего не устареваем.
+      const seenBefore = new Date(now.getTime() - source.staleAfterDays * DAY_MS);
+      summary.deactivated = await deactivateStaleListings(dataSource.id, seenBefore, now);
     }
 
     await refreshDuplicates();

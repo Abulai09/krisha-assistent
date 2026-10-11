@@ -9,7 +9,7 @@ import { processQueuedRun, runDueScheduledCollections, syncSourceStatuses } from
 // Разовые команды для ручного запуска и планировщиков ОС (cron, Планировщик заданий Windows).
 
 const USAGE = `Использование:
-  npm run collect -- <источник>     обновить источник (synthetic | krisha-api)
+  npm run collect -- <источник>     обновить источник (synthetic | krisha-api | krisha-web)
   npm run import -- <файл.csv|json> импортировать объявления из файла
   npm run revalue                   пересчитать оценки без загрузки данных
   npm run worker:once               один цикл worker'а (очередь + плановые обновления)`;
@@ -50,7 +50,7 @@ function report(summary: Awaited<ReturnType<typeof runCollection>>) {
     [
       `Статус: ${summary.status}`,
       `Получено: ${summary.fetched}, новых: ${summary.created}, изменено: ${summary.updated}, без изменений: ${summary.unchanged}`,
-      `Отклонено при проверке: ${summary.invalid}, снято с публикации: ${summary.deactivated}, оценено: ${summary.valued}`,
+      `Отклонено при проверке: ${summary.invalid}, убрано из активных: ${summary.deactivated}, оценено: ${summary.valued}`,
       summary.error ? `Ошибка: ${summary.error}` : null,
     ]
       .filter(Boolean)

@@ -12,6 +12,11 @@ const envSchema = z.object({
   SCHEDULED_SOURCES: z.string().default("synthetic"),
   IMPORT_MAX_FILE_MB: z.coerce.number().min(0.1).max(50).default(5),
   IMPORT_MAX_ROWS: z.coerce.number().int().min(1).max(100_000).default(20_000),
+  /** Сбор со страниц krisha.kz — выключен по умолчанию, см. docs/adr/0002. */
+  KRISHA_WEB_ENABLED: z.stringbool().default(false),
+  KRISHA_WEB_MAX_PAGES: z.coerce.number().int().min(1).max(20).default(5),
+  /** Пауза между страницами; не меньше 2 с, чтобы не нагружать сайт. */
+  KRISHA_WEB_DELAY_MS: z.coerce.number().int().min(2_000).max(60_000).default(4_000),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 });
 

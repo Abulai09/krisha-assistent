@@ -21,6 +21,7 @@ npm run test:integration      # реальная БД deal_finder_test, файл
 npm run test:e2e              # Playwright: next build + start на 3101 с тестовой БД, channel "chrome"
 npx vitest run tests/unit/valuation.test.ts -t "выбросы"   # один тест
 npx playwright test -g "фильтр"                             # один E2E
+npx playwright test --project=mobile                        # проекты: desktop | mobile (только *mobile.spec.ts)
 ```
 
 После изменения `prisma/schema.prisma`: `npm run db:migrate:dev -- --name <name>`, затем `npx prisma generate`
@@ -35,17 +36,19 @@ integration и E2E берут `DATABASE_URL_TEST` (БД создаёт `docker/i
   `listing/` (zod-схема входа, нормализация, отпечатки дубликатов), `valuation/` (аналоги, статистика,
   уверенность, объяснения, коды предупреждений), `deals/dealScore.ts`. Здесь живут все бизнес-правила и unit-тесты.
 - `src/server/sources/` — источники за интерфейсом `ListingSource`, регистрируются в `registry.ts`
-  (`synthetic`, `krisha-api` — заглушка `NOT_CONNECTED`; файловый импорт создаётся на каждый файл).
+  (`synthetic`, `krisha-api` — заглушка `NOT_CONNECTED`, `krisha-web` — страницы выдачи; файловый импорт — на каждый файл).
   `src/server/services/` — сценарии. Методика оценки — `docs/valuation.md`, источники — `docs/data-sources.md`.
   Главный конвейер — `collectionService.runCollection()`: advisory lock → fetch с retry/timeout → валидация →
   идемпотентный upsert по `(sourceId, externalId)` + история цен → деактивация → дубликаты → пересчёт оценок → `CollectionRun`.
-- `src/app/` — только отображение; админка ставит `CollectionRun(status=QUEUED)`, выполняет worker.
+- `src/app/` — только отображение; админка ставит `CollectionRun(status=QUEUED)`, выполняет worker
+  (`src/worker/index.ts` — цикл, `cli.ts` — разовые команды, `tasks.ts` — очередь и плановые обновления).
+- Решения по архитектуре — `docs/adr/`.
 - `src/config/env.ts` — единственное место чтения `process.env`.
 
 ## Правила проекта
 
-- **Не реализовывать сбор данных с Krisha.kz** (соглашение запрещает, см. docs/adr/0001). Новый источник —
-  только новая реализация `ListingSource` для разрешённого API/фида.
+- Сбор с Krisha.kz — только через `krisha-web` в рамках docs/adr/0002: без обхода капчи/блокировок, без
+  фото/контактов/описаний, с паузами. Вёрстка закреплена в `tests/unit/fixtures/krisha-search-page.html`.
 - Синтетические и реальные данные никогда не смешиваются (`DataSource.isSynthetic`, `dataRealmService`).
 - Не выдумывать характеристики (неизвестное — `null`), не показывать фиктивную точность (`formatKztApprox`),
   при нехватке аналогов — `INSUFFICIENT_DATA`, а не догадка.

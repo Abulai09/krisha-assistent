@@ -73,7 +73,11 @@ async function ListingDetailView({ params }: Pick<PageProps<"/listings/[id]">, "
               .join(" · ")}
           </p>
           <div className="flex flex-wrap gap-2 pt-1">
-            {listing.status === "INACTIVE" && <Badge variant="secondary">Снято с публикации</Badge>}
+            {listing.status === "INACTIVE" && (
+              <Badge variant="secondary">
+                {listing.deactivationReason === "STALE" ? "Давно не обновлялось на сайте" : "Снято с публикации"}
+              </Badge>
+            )}
             {listing.source.isSynthetic && (
               <Badge variant="outline" className="border-warning/50 text-warning">
                 Тестовые данные

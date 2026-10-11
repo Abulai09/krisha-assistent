@@ -110,7 +110,7 @@ async function AdminPanel() {
               {listSchedulableSources().map((source) => {
                 const record = sourcesByKey.get(source.key);
                 const status = record?.status ?? "NOT_CONNECTED";
-                const notConnected = source.kind === "API" && status === "NOT_CONNECTED";
+                const notConnected = source.kind !== "SYNTHETIC" && status === "NOT_CONNECTED";
                 return (
                   <div key={source.key} className="space-y-2 rounded-lg border p-3">
                     <div className="flex flex-wrap items-center gap-2">
@@ -125,7 +125,7 @@ async function AdminPanel() {
                     </p>
                     <RunSourceButton
                       sourceKey={source.key}
-                      disabledReason={notConnected ? "Нельзя запустить: нет разрешённого доступа к источнику." : undefined}
+                      disabledReason={notConnected ? "Нельзя запустить: источник не подключён (см. сообщение выше)." : undefined}
                     />
                   </div>
                 );
