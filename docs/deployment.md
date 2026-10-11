@@ -34,8 +34,18 @@ PostgreSQL в Docker уже настроен на `restart: unless-stopped`.
 (обрабатывает очередь ручных запусков и плановые обновления, у которых подошло время).
 
 - **Linux/macOS, cron** (каждые 15 минут): `*/15 * * * * cd /path/to/app && npm run worker:once >> worker.log 2>&1`
-- **Windows, Планировщик заданий**: «Создать задачу» → триггер «Ежедневно, повторять каждые 15 минут» →
-  действие `cmd /c "cd /d C:\path\to\app && npm run worker:once >> worker.log 2>&1"`.
+- **Windows, Планировщик заданий**: готовый скрипт `scripts/worker-once.cmd` (лог — `logs/worker.log`).
+  Задача без окна консоли, пока пользователь в системе (PowerShell, права администратора не нужны):
+
+  ```powershell
+  $dir = "C:\path\to\app"
+  Register-ScheduledTask -TaskName "DealFinder Worker" `
+    -Action (New-ScheduledTaskAction -Execute "conhost.exe" -Argument "--headless cmd.exe /c `"$dir\scripts\worker-once.cmd`"" -WorkingDirectory $dir) `
+    -Trigger (New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 15)) `
+    -Settings (New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -StartWhenAvailable)
+  ```
+
+  Скрипт вызывает `C:\Program Files\nodejs\npm.cmd` — поправьте путь, если Node.js установлен в другое место.
 
 Ручные запуски из админки в этом режиме выполняются при ближайшем срабатывании расписания.
 
