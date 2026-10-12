@@ -81,11 +81,14 @@ export async function runCollection(options: RunCollectionOptions): Promise<Coll
   }
 
   try {
+    await closeInterruptedRuns();
     return await executeRun(options, now, summary);
   } finally {
     await lock.release();
   }
 }
+
+
 
 async function executeRun(options: RunCollectionOptions, now: Date, summary: CollectionSummary): Promise<CollectionSummary> {
   const { source } = options;
@@ -169,13 +172,33 @@ async function executeRun(options: RunCollectionOptions, now: Date, summary: Col
     const message = errorMessage(error);
     summary.status = "FAILED";
     summary.error = message;
+    // Сначала — в лог: если база недоступна и итог не запишется, причина всё равно останется.
+    logger.error("Обновление завершилось ошибкой", { runId: run.id, source: source.key, error: message });
+    await recordFailure(run.id, dataSource.id, summary, errorSamples, error);
+    return summary;
+  }
+}
+
+/**
+ * Записывает итог упавшего запуска. Если и это не удалось (база недоступна), запуск останется RUNNING —
+ * его закроет closeInterruptedRuns() при следующем обновлении.
+ */
+async function recordFailure(
+  runId: string,
+  dataSourceId: string,
+  summary: CollectionSummary,
+  errorSamples: ListingValidationError[],
+  error: unknown,
+): Promise<void> {
+  const message = summary.error ?? errorMessage(error);
+  try {
     await db.$transaction([
       db.collectionRun.update({
-        where: { id: run.id },
+        where: { id: runId },
         data: { ...runData(summary, errorSamples, new Date()), errorMessage: message },
       }),
       db.dataSource.update({
-        where: { id: dataSource.id },
+        where: { id: dataSourceId },
         data: {
           status: error instanceof SourceNotConnectedError ? "NOT_CONNECTED" : "ERROR",
           statusMessage: message,
@@ -184,8 +207,8 @@ async function executeRun(options: RunCollectionOptions, now: Date, summary: Col
         },
       }),
     ]);
-    logger.error("Обновление завершилось ошибкой", { runId: run.id, source: source.key, error: message });
-    return summary;
+  } catch (recordError) {
+    logger.error("Не удалось записать итог упавшего запуска", { runId, error: errorMessage(recordError) });
   }
 }
 
@@ -209,14 +232,24 @@ export async function failInterruptedRuns(): Promise<number> {
   const lock = await tryAcquireLock(LOCK_KEYS.collection);
   if (!lock) return 0;
   try {
-    const result = await db.collectionRun.updateMany({
-      where: { status: "RUNNING" },
-      data: { status: "FAILED", finishedAt: new Date(), errorMessage: "Прервано: процесс был остановлен во время обновления" },
-    });
-    return result.count;
+    return await closeInterruptedRuns();
   } finally {
     await lock.release();
   }
+}
+
+/**
+ * Запуски, «зависшие» в RUNNING: процесс упал посреди обновления и не успел записать итог.
+ * Только под блокировкой — раз она у нас, никакое другое обновление сейчас не идёт. Вызывается в начале
+ * каждого обновления: worker по расписанию (worker:once) не проходит через старт постоянного процесса.
+ */
+async function closeInterruptedRuns(): Promise<number> {
+  const { count } = await db.collectionRun.updateMany({
+    where: { status: "RUNNING" },
+    data: { status: "FAILED", finishedAt: new Date(), errorMessage: "Прервано: процесс был остановлен во время обновления" },
+  });
+  if (count > 0) logger.warn("Закрыты прерванные запуски", { count });
+  return count;
 }
 
 function countOutcomes(outcomes: IngestOutcome[], summary: CollectionSummary) {

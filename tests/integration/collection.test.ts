@@ -196,6 +196,20 @@ describe("перезапуск после сбоя", () => {
     // После восстановления обычный запуск работает.
     expect((await run(source, DAY2)).status).toBe("SUCCESS");
   });
+
+  it("обычное обновление само закрывает зависший запуск (worker:once не проходит через старт worker'а)", async () => {
+    const source = new FakeSource();
+    source.records = marketListings(5);
+    await run(source);
+    const dataSource = await db.dataSource.findUniqueOrThrow({ where: { key: "fake" } });
+    await db.collectionRun.create({
+      data: { id: "stuck", sourceId: dataSource.id, trigger: "SCHEDULED", status: "RUNNING", startedAt: DAY1 },
+    });
+
+    expect((await run(source, DAY2)).status).toBe("SUCCESS");
+    expect((await db.collectionRun.findUniqueOrThrow({ where: { id: "stuck" } })).status).toBe("FAILED");
+    expect(await db.collectionRun.count({ where: { status: "RUNNING" } })).toBe(0);
+  });
 });
 
 describe("очередь ручных запусков", () => {

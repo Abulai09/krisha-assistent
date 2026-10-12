@@ -62,6 +62,8 @@ integration и E2E берут `DATABASE_URL_TEST` (БД создаёт `docker/i
 - Схема БД берётся из `?schema=` в `DATABASE_URL` (`databaseSchema()` в `src/lib/db.ts`); сырой SQL пишется без
   имени схемы — его находит `search_path`. Supabase: worker/миграции — Session pooler (advisory lock сессионный),
   сайт на Vercel — Transaction pooler (`DATABASE_POOL_MODE`, `urlForPoolMode()` в `src/lib/pgConfig.ts`).
+  Новое соединение с Supabase открывается 2–3 с: у Prisma увеличен `transactionOptions.maxWait` (в `db.ts`), у пула и
+  соединения блокировки — `keepAlive` и обработчик `'error'` (без него обрыв простаивающего соединения роняет процесс).
 - Prisma 7: клиент генерируется в `src/generated/prisma` (импорт `@/generated/prisma/client`), подключение через
   `@prisma/adapter-pg`, URL — в `prisma.config.ts`.
 - Доступ: `src/proxy.ts` пускает на сайт только одобренных (`User.status`); открыты `/login`, `/register`
