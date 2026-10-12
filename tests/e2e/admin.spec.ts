@@ -41,28 +41,6 @@ test.describe("управление", () => {
     await expect(page.getByText("Вход администратора").first()).toBeVisible();
   });
 
-  test("импорт: некорректный файл отклоняется с понятной ошибкой", async ({ page }) => {
-    await login(page);
-    await page.getByLabel("Файл CSV или JSON").setInputFiles({
-      name: "bad.csv",
-      mimeType: "text/csv",
-      buffer: Buffer.from("externalId,priceKzt\nA,дорого\n"),
-    });
-    await page.getByRole("button", { name: "Загрузить и импортировать" }).click();
-    await expect(page.locator("form").getByRole("alert")).toContainText("Ни одно объявление не прошло проверку");
-  });
-
-  test("импорт: бинарный файл под видом CSV отклоняется", async ({ page }) => {
-    await login(page);
-    await page.getByLabel("Файл CSV или JSON").setInputFiles({
-      name: "image.csv",
-      mimeType: "text/csv",
-      buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0xff, 0xfe]),
-    });
-    await page.getByRole("button", { name: "Загрузить и импортировать" }).click();
-    await expect(page.locator("form").getByRole("alert")).toContainText("текстовым CSV или JSON");
-  });
-
   test("база данных: таблицы, строки и страницы", async ({ page }) => {
     await login(page);
     await page.getByRole("link", { name: "База данных" }).click();

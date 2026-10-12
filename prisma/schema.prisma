@@ -265,8 +265,6 @@ model CollectionRun {
   deactivatedCount Int @default(0)
   valuedCount      Int @default(0)
 
-  // Для импорта файла из админки: путь к сохранённому файлу во входящей папке.
-  inputFile    String?
   errorMessage String?
   // Первые N ошибок валидации/обработки для диагностики.
   errorSamples Json?
@@ -327,7 +325,7 @@ enum AuditAction {
   USER_DELETED
   ROW_DELETED
   RUN_ENQUEUED
-  IMPORT_UPLOADED
+  IMPORT_UPLOADED // загрузка файла из админки удалена; значение — для старых записей журнала
   DATA_PRUNED
 }
 

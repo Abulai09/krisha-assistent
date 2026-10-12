@@ -3,7 +3,7 @@
 | Ключ | Класс | Статус | Полный срез* |
 | --- | --- | --- | --- |
 | `synthetic` | `SyntheticSource` | Работает. Вымышленные объявления, помечены как тестовые | да |
-| `file-import` | `FileImportSource` | Работает. CSV/JSON через CLI или раздел «Управление» | нет |
+| `file-import` | `FileImportSource` | Работает. CSV/JSON через CLI (`npm run import`) | нет |
 | `krisha-api` | `KrishaApiSource` | **Не подключён** — нет разрешения и API | да |
 | `krisha-web` | `KrishaWebSource` | Выключен по умолчанию (`KRISHA_WEB_ENABLED`). Первые страницы выдачи сайта — см. [ADR 0002](adr/0002-krisha-web-source.md) | нет |
 

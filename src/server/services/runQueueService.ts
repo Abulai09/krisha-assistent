@@ -1,6 +1,5 @@
 import { getEnv } from "@/config/env";
 import { db } from "@/lib/db";
-import { FileImportSource, FILE_IMPORT_SOURCE } from "@/server/sources/fileImportSource";
 import { getSchedulableSource } from "@/server/sources/registry";
 import type { ListingSource } from "@/server/sources/types";
 import { ensureDataSource } from "./collectionService";
@@ -38,18 +37,9 @@ export async function enqueueManualRun(sourceKey: string, now = new Date()) {
   return db.collectionRun.create({ data: { sourceId: dataSource.id, trigger: "MANUAL", status: "QUEUED", requestedAt: now } });
 }
 
-export async function enqueueFileImport(inputFile: string, now = new Date()) {
-  await assertCanEnqueue(now);
-  const dataSource = await ensureDataSource(new FileImportSource(inputFile));
-  return db.collectionRun.create({
-    data: { sourceId: dataSource.id, trigger: "MANUAL", status: "QUEUED", requestedAt: now, inputFile },
-  });
-}
-
 export interface QueuedRun {
   runId: string;
   source: ListingSource;
-  inputFile: string | null;
 }
 
 /** Следующий запуск из очереди (самый ранний). */
@@ -61,20 +51,12 @@ export async function nextQueuedRun(): Promise<QueuedRun | null> {
   });
   if (!run) return null;
 
-  if (run.source.key === FILE_IMPORT_SOURCE.key) {
-    if (!run.inputFile) {
-      await failQueuedRun(run.id, "Не найден файл импорта");
-      return nextQueuedRun();
-    }
-    return { runId: run.id, source: new FileImportSource(run.inputFile), inputFile: run.inputFile };
-  }
-
   const source = getSchedulableSource(run.source.key);
   if (!source) {
     await failQueuedRun(run.id, `Источник «${run.source.key}» больше не поддерживается`);
     return nextQueuedRun();
   }
-  return { runId: run.id, source, inputFile: null };
+  return { runId: run.id, source };
 }
 
 async function failQueuedRun(runId: string, message: string) {

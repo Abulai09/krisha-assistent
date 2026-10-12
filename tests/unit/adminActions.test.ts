@@ -8,7 +8,6 @@ const mocks = vi.hoisted(() => {
   return {
     user: null as null | { id: string; login?: string; role: "USER" | "ADMIN" },
     enqueueManualRun: vi.fn(),
-    acceptImportUpload: vi.fn(),
     setUserStatus: vi.fn(),
     deleteUser: vi.fn(),
     deleteRow: vi.fn(),
@@ -35,9 +34,8 @@ vi.mock("@/server/services/dbBrowserService", () => ({
   isTableName: (name: string) => ["Listing", "User"].includes(name),
   DbBrowserError: class DbBrowserError extends Error {},
 }));
-vi.mock("@/server/services/importUploadService", () => ({ acceptImportUpload: mocks.acceptImportUpload }));
 
-const { deleteRowAction, enqueueRunAction, uploadImportAction, userAction } = await import("@/app/admin/actions");
+const { deleteRowAction, enqueueRunAction, userAction } = await import("@/app/admin/actions");
 
 const IDLE = { status: "idle" } as const;
 const NOT_ADMIN = { status: "error", message: "Нужен вход администратора — войдите снова." };
@@ -48,16 +46,9 @@ function form(fields: Record<string, string>) {
   return data;
 }
 
-function uploadForm() {
-  const data = new FormData();
-  data.set("file", new File(["externalId\nA\n"], "a.csv", { type: "text/csv" }));
-  return data;
-}
-
 beforeEach(() => {
   mocks.user = null;
   mocks.enqueueManualRun.mockReset().mockResolvedValue({ id: "run" });
-  mocks.acceptImportUpload.mockReset().mockResolvedValue({ runId: "run", total: 1, valid: 1, invalid: 0, sampleErrors: [] });
   mocks.setUserStatus.mockReset().mockResolvedValue(undefined);
   mocks.deleteUser.mockReset().mockResolvedValue(undefined);
   mocks.deleteRow.mockReset().mockResolvedValue(undefined);
@@ -67,11 +58,9 @@ beforeEach(() => {
 describe("Server Actions «Управления»", () => {
   it("без входа ни одно действие не выполняется", async () => {
     expect(await enqueueRunAction(IDLE, form({ source: "synthetic" }))).toEqual(NOT_ADMIN);
-    expect((await uploadImportAction(IDLE, uploadForm())).status).toBe("error");
     expect(await userAction(IDLE, form({ userId: "user1", action: "approve" }))).toEqual(NOT_ADMIN);
     expect(await deleteRowAction(IDLE, form({ table: "Listing", id: "x" }))).toEqual(NOT_ADMIN);
     expect(mocks.enqueueManualRun).not.toHaveBeenCalled();
-    expect(mocks.acceptImportUpload).not.toHaveBeenCalled();
     expect(mocks.setUserStatus).not.toHaveBeenCalled();
     expect(mocks.deleteRow).not.toHaveBeenCalled();
     expect(mocks.recordAudit).not.toHaveBeenCalled();

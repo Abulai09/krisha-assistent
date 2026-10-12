@@ -16,12 +16,6 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/**": ["./certs/**"],
   },
-  experimental: {
-    serverActions: {
-      // Импорт файла до 5 МБ (IMPORT_MAX_FILE_MB) + накладные расходы multipart.
-      bodySizeLimit: "6mb",
-    },
-  },
   turbopack: {
     rules: {
       "*.css": {

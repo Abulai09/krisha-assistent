@@ -2,10 +2,8 @@
 
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { deleteRowAction, enqueueRunAction, uploadImportAction, userAction, type ActionState } from "./actions";
+import { deleteRowAction, enqueueRunAction, userAction, type ActionState } from "./actions";
 
 const IDLE: ActionState = { status: "idle" };
 
@@ -28,26 +26,6 @@ export function RunSourceButton({ sourceKey, disabledReason }: { sourceKey: stri
       </Button>
       {disabledReason && <p className="text-xs text-muted-foreground">{disabledReason}</p>}
       <ActionMessage state={state} />
-    </form>
-  );
-}
-
-export function UploadImportForm({ maxMb }: { maxMb: number }) {
-  const [state, action, pending] = useActionState(uploadImportAction, IDLE);
-  return (
-    <form action={action} className="space-y-3">
-      <div className="space-y-1.5">
-        <Label htmlFor="file">Файл CSV или JSON</Label>
-        <Input id="file" name="file" type="file" accept=".csv,.json,text/csv,application/json" required aria-describedby="file-hint" />
-        <p id="file-hint" className="text-xs text-muted-foreground">
-          До {maxMb} МБ, кодировка UTF-8. Формат колонок — в docs/data-sources.md. Загружайте только данные, на использование
-          которых у вас есть права.
-        </p>
-      </div>
-      <ActionMessage state={state} />
-      <Button type="submit" disabled={pending}>
-        {pending ? "Проверяем файл…" : "Загрузить и импортировать"}
-      </Button>
     </form>
   );
 }

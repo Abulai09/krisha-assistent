@@ -1,4 +1,3 @@
-import { rm } from "node:fs/promises";
 import { getEnv, scheduledSourceKeys } from "@/config/env";
 import { db } from "@/lib/db";
 import { errorMessage } from "@/lib/utils/async";
@@ -32,13 +31,7 @@ export async function syncSourceStatuses() {
 export async function processQueuedRun(): Promise<CollectionSummary | null> {
   const queued = await nextQueuedRun();
   if (!queued) return null;
-  const summary = await runCollection({ source: queued.source, trigger: "MANUAL", queuedRunId: queued.runId });
-  if (queued.inputFile && summary.status !== "LOCKED") {
-    await rm(queued.inputFile, { force: true }).catch((error) =>
-      logger.warn("Не удалось удалить обработанный файл импорта", { error: errorMessage(error) }),
-    );
-  }
-  return summary;
+  return runCollection({ source: queued.source, trigger: "MANUAL", queuedRunId: queued.runId });
 }
 
 /** Плановое обновление источников, у которых подошло время. Время берётся из БД — переживает перезапуск worker'а. */

@@ -15,7 +15,7 @@ import { getWorkerState } from "@/server/services/heartbeatService";
 import { listUsers } from "@/server/services/userService";
 import { listSchedulableSources } from "@/server/sources/registry";
 import { AdminTabs } from "./admin-tabs";
-import { RunSourceButton, UploadImportForm, UserActions } from "./forms";
+import { RunSourceButton, UserActions } from "./forms";
 import { requireAdminPage } from "./guard";
 
 export const metadata: Metadata = { title: "Управление", robots: { index: false } };
@@ -47,7 +47,7 @@ async function AdminPanel() {
 
   return (
     <>
-      <PageHeader title="Управление" description="Пользователи, обновления данных, импорт и журнал запусков." />
+      <PageHeader title="Управление" description="Пользователи, обновления данных и журнал запусков." />
       <AdminTabs active="/admin" />
 
       <div className="space-y-6">
@@ -55,7 +55,7 @@ async function AdminPanel() {
           <div role="status" className="rounded-xl border border-warning/40 bg-warning-muted p-4 text-sm">
             <p className="font-medium">Фоновый процесс не запущен</p>
             <p className="text-muted-foreground">
-              Запуски из очереди и импорт файлов выполняет worker. Запустите его командой{" "}
+              Запуски из очереди выполняет worker. Запустите его командой{" "}
               <code className="font-mono">npm run worker</code> — задачи из очереди будут обработаны автоматически.
             </p>
           </div>
@@ -65,19 +65,18 @@ async function AdminPanel() {
 
         <UsersCard users={users} />
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle>Источники данных</CardTitle>
               <CardDescription>Автообновление каждые {getEnv().WORKER_INTERVAL_MINUTES} мин. для источников из SCHEDULED_SOURCES.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-3">
               {listSchedulableSources().map((source) => {
                 const record = sourcesByKey.get(source.key);
                 const status = record?.status ?? "NOT_CONNECTED";
                 const notConnected = source.kind !== "SYNTHETIC" && status === "NOT_CONNECTED";
                 return (
-                  <div key={source.key} className="space-y-2 rounded-lg border p-3">
+                  <div key={source.key} className="min-w-0 space-y-2 rounded-lg border p-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-medium">{source.name}</p>
                       <Badge variant="outline">{SOURCE_STATUS_LABELS[status]}</Badge>
@@ -98,16 +97,6 @@ async function AdminPanel() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Импорт объявлений из файла</CardTitle>
-              <CardDescription>Файл проверяется сразу, а сохранение и пересчёт оценок выполняет worker.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <UploadImportForm maxMb={getEnv().IMPORT_MAX_FILE_MB} />
-            </CardContent>
-          </Card>
-        </div>
 
         <Card>
           <CardHeader>
