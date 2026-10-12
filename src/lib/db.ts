@@ -2,6 +2,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import { PrismaClient } from "@/generated/prisma/client";
 import { getEnv } from "@/config/env";
+import { pgConnectionConfig } from "@/lib/pgConfig";
 
 // Один PrismaClient на процесс. В dev Next.js перезагружает модули — храним экземпляр в globalThis,
 // чтобы не открывать новый пул соединений при каждом изменении файла.
@@ -23,7 +24,7 @@ function createClient(): PrismaClient {
   // Запросы Prisma адаптер сам дополняет схемой, а сырой SQL ($queryRaw) ищет таблицы по search_path —
   // задаём его при открытии соединения (Supabase Session pooler этот параметр пропускает).
   const pool = new Pool({
-    connectionString: DATABASE_URL,
+    ...pgConnectionConfig(DATABASE_URL),
     options: schema === "public" ? undefined : `-c search_path=${schema}`,
   });
   return new PrismaClient({ adapter: new PrismaPg(pool, { schema, disposeExternalPool: true }) });

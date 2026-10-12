@@ -1,5 +1,6 @@
 import { Client } from "pg";
 import { getEnv } from "@/config/env";
+import { pgConnectionConfig } from "@/lib/pgConfig";
 
 /**
  * Блокировка «одно задание за раз» через pg_try_advisory_lock.
@@ -17,7 +18,7 @@ export interface HeldLock {
 }
 
 export async function tryAcquireLock(key: number): Promise<HeldLock | null> {
-  const client = new Client({ connectionString: getEnv().DATABASE_URL });
+  const client = new Client(pgConnectionConfig(getEnv().DATABASE_URL));
   await client.connect();
   try {
     const result = await client.query<{ locked: boolean }>("SELECT pg_try_advisory_lock($1) AS locked", [key]);

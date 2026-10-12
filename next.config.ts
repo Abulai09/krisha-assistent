@@ -12,6 +12,10 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   poweredByHeader: false,
+  // Корневой сертификат Supabase читается в рантайме (src/lib/pgConfig.ts) — сборщик сам его не видит.
+  outputFileTracingIncludes: {
+    "/**": ["./certs/**"],
+  },
   experimental: {
     serverActions: {
       // Импорт файла до 5 МБ (IMPORT_MAX_FILE_MB) + накладные расходы multipart.
