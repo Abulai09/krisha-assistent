@@ -69,7 +69,9 @@ export function buildCatalogWhere(filters: CatalogFilters, realm: DataRealm, now
   if (filters.yearMin !== undefined) and.push({ yearBuilt: { gte: filters.yearMin } });
   if (filters.yearMax !== undefined) and.push({ yearBuilt: { lte: filters.yearMax } });
   if (filters.published) {
-    and.push({ publishedAt: { gte: new Date(now.getTime() - Number(filters.published) * DAY_MS) } });
+    // Krisha в выдаче не показывает дату публикации — тогда берём, когда объявление впервые попало к нам.
+    const since = new Date(now.getTime() - Number(filters.published) * DAY_MS);
+    and.push({ OR: [{ publishedAt: { gte: since } }, { publishedAt: null, firstSeenAt: { gte: since } }] });
   }
 
   // Фильтр по этажу: неизвестный этаж не проходит фильтр — мы не можем утверждать, что он подходит.

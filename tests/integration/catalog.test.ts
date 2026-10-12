@@ -97,11 +97,24 @@ describe("фильтры каталога работают в базе", () => {
     expect(middle).toContain("DEAL10");
   });
 
-  it("ЖК, год, состояние, дата публикации", async () => {
+  it("ЖК, год, состояние", async () => {
     expect(await ids({ discount: "any", complex: "другой" })).toEqual(["MEDEU"]);
     expect(await ids({ discount: "any", yearMin: "2016" })).toEqual([]);
     expect(await ids({ discount: "any", condition: "EXCELLENT" })).toEqual([]);
-    expect(await ids({ discount: "any", published: "7" })).toEqual(["DEAL20"]);
+  });
+
+  it("«Появилось»: без даты публикации считается дата, когда объявление впервые попало к нам", async () => {
+    // У Krisha даты публикации нет ни у одного объявления — раньше фильтр всегда давал пустой список.
+    const fresh = await db.listing.findFirstOrThrow({ where: { externalId: "DEAL10" } });
+    await db.listing.updateMany({ where: { publishedAt: null }, data: { firstSeenAt: new Date(NOW.getTime() - 30 * 86_400_000) } });
+    await db.listing.update({ where: { id: fresh.id }, data: { firstSeenAt: new Date(NOW.getTime() - 86_400_000) } });
+
+    expect((await ids({ discount: "any", published: "7" })).sort()).toEqual(["DEAL10", "DEAL20"]);
+  });
+
+  it("цена в тенге и перепутанный диапазон работают как ожидает человек", async () => {
+    expect(await ids({ discount: "any", priceMax: "42000000" })).toEqual(["DEAL20"]);
+    expect(await ids({ discount: "any", priceMin: "90", priceMax: "70" })).toEqual(["MEDEU"]);
   });
 
   it("Deal Score, уверенность и риск фильтруют только надёжно оценённые", async () => {

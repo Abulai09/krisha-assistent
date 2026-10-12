@@ -10,8 +10,30 @@ export const CATALOG_PAGE_SIZE = 24;
 const blankToUndefined = (value: unknown) =>
   typeof value === "string" && value.trim() === "" ? undefined : Array.isArray(value) ? value[0] : value;
 
+/** «30 000 000», «35,5» → число: люди пишут пробелы между разрядами и запятую вместо точки. */
+const normalizeNumber = (value: unknown) => {
+  const raw = blankToUndefined(value);
+  return typeof raw === "string" ? raw.replace(/[\s\u00a0]/g, "").replace(",", ".") : raw;
+};
+
 const optionalNumber = (min: number, max: number) =>
-  z.preprocess(blankToUndefined, z.coerce.number().min(min).max(max).optional()).catch(undefined);
+  z.preprocess(normalizeNumber, z.coerce.number().min(min).max(max).optional()).catch(undefined);
+
+/** Порог, с которого число — уже тенге, а не миллионы: квартир дороже 10 млрд ₸ не бывает. */
+const PRICE_IN_KZT_FROM = 10_000;
+
+/** Цена в миллионах тенге. Введённую в тенге (30 000 000) переводим, а не выбрасываем молча. */
+const optionalPriceMillions = z
+  .preprocess(
+    normalizeNumber,
+    z.coerce
+      .number()
+      .min(0)
+      .transform((value) => (value >= PRICE_IN_KZT_FROM ? value / 1_000_000 : value))
+      .pipe(z.number().max(PRICE_IN_KZT_FROM))
+      .optional(),
+  )
+  .catch(undefined);
 
 const optionalEnum = <T extends readonly [string, ...string[]]>(values: T) =>
   z.preprocess(blankToUndefined, z.enum(values).optional()).catch(undefined);
@@ -21,8 +43,8 @@ export const catalogFiltersSchema = z.object({
   district: optionalEnum(DISTRICTS),
   rooms: optionalEnum(["1", "2", "3", "4", "5"] as const),
   /** Цена в миллионах тенге — так её вводят люди. */
-  priceMin: optionalNumber(0, 10_000),
-  priceMax: optionalNumber(0, 10_000),
+  priceMin: optionalPriceMillions,
+  priceMax: optionalPriceMillions,
   areaMin: optionalNumber(0, 1_000),
   areaMax: optionalNumber(0, 1_000),
   /** "any" — показать все объявления, включая без оценки. По умолчанию — от 8%. */
@@ -44,8 +66,24 @@ export const catalogFiltersSchema = z.object({
 export type CatalogFilters = z.infer<typeof catalogFiltersSchema>;
 
 export function parseCatalogFilters(searchParams: Record<string, string | string[] | undefined>): CatalogFilters {
-  return catalogFiltersSchema.parse(searchParams);
+  const filters = catalogFiltersSchema.parse(searchParams);
+  // «от 50 до 30» — почти всегда перепутанные поля, а не желание увидеть пустой список.
+  for (const [min, max] of RANGES) {
+    const low = filters[min];
+    const high = filters[max];
+    if (low !== undefined && high !== undefined && low > high) {
+      filters[min] = high;
+      filters[max] = low;
+    }
+  }
+  return filters;
 }
+
+const RANGES = [
+  ["priceMin", "priceMax"],
+  ["areaMin", "areaMax"],
+  ["yearMin", "yearMax"],
+] as const;
 
 /** Минимальная скидка с учётом значения по умолчанию; null — фильтр по скидке выключен. */
 export function effectiveMinDiscount(filters: CatalogFilters): number | null {

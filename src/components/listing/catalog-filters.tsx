@@ -88,7 +88,7 @@ export function CatalogFiltersForm({
           </NativeSelect>
         </Field>
 
-        <RangeField label="Цена, млн ₸" name="price" min={filters.priceMin} max={filters.priceMax} step="0.1" />
+        <RangeField label="Цена, млн ₸" name="price" min={filters.priceMin} max={filters.priceMax} />
 
         <details className="group/more rounded-lg border" open={secondaryActive > 0}>
           <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2 text-sm font-medium">
@@ -96,7 +96,7 @@ export function CatalogFiltersForm({
             <ChevronDown className="size-4 text-muted-foreground transition-transform group-open/more:rotate-180" aria-hidden="true" />
           </summary>
           <div className="space-y-4 border-t p-3">
-            <RangeField label="Площадь, м²" name="area" min={filters.areaMin} max={filters.areaMax} step="1" />
+            <RangeField label="Площадь, м²" name="area" min={filters.areaMin} max={filters.areaMax} />
 
             <Field label="Состояние" htmlFor="condition">
               <NativeSelect id="condition" name="condition" defaultValue={filters.condition ?? ""} className="w-full">
@@ -129,9 +129,9 @@ export function CatalogFiltersForm({
               </NativeSelect>
             </Field>
 
-            <RangeField label="Год постройки" name="year" min={filters.yearMin} max={filters.yearMax} step="1" />
+            <RangeField label="Год постройки" name="year" min={filters.yearMin} max={filters.yearMax} step="1" inputMode="numeric" />
 
-            <Field label="Опубликовано" htmlFor="published">
+            <Field label="Появилось" htmlFor="published" hint="По дате публикации, а если её нет — когда объявление впервые попало к нам.">
               <NativeSelect id="published" name="published" defaultValue={filters.published ?? ""} className="w-full">
                 <NativeSelectOption value="">За всё время</NativeSelectOption>
                 <NativeSelectOption value="1">За сутки</NativeSelectOption>
@@ -180,25 +180,41 @@ export function CatalogFiltersForm({
   );
 }
 
-function Field({ label, htmlFor, children }: { label: string; htmlFor: string; children: React.ReactNode }) {
+function Field({ label, htmlFor, hint, children }: { label: string; htmlFor: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }
 
-function RangeField({ label, name, min, max, step }: { label: string; name: string; min?: number; max?: number; step: string }) {
+/** step="any" — иначе браузер не даст отправить 25,55 млн или 45,5 м² («введите допустимое значение»). */
+function RangeField({
+  label,
+  name,
+  min,
+  max,
+  step = "any",
+  inputMode = "decimal",
+}: {
+  label: string;
+  name: string;
+  min?: number;
+  max?: number;
+  step?: string;
+  inputMode?: "decimal" | "numeric";
+}) {
   return (
     <fieldset className="space-y-1.5">
       <legend className="text-sm font-medium">{label}</legend>
       <div className="flex items-center gap-2">
-        <Input name={`${name}Min`} type="number" inputMode="decimal" step={step} min={0} placeholder="от" aria-label={`${label}: от`} defaultValue={min} />
+        <Input name={`${name}Min`} type="number" inputMode={inputMode} step={step} min={0} placeholder="от" aria-label={`${label}: от`} defaultValue={min} />
         <span className="text-muted-foreground" aria-hidden="true">
           –
         </span>
-        <Input name={`${name}Max`} type="number" inputMode="decimal" step={step} min={0} placeholder="до" aria-label={`${label}: до`} defaultValue={max} />
+        <Input name={`${name}Max`} type="number" inputMode={inputMode} step={step} min={0} placeholder="до" aria-label={`${label}: до`} defaultValue={max} />
       </div>
     </fieldset>
   );
