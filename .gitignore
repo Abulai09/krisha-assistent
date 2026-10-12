@@ -43,6 +43,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# резервные копии БД (npm run backup) — содержат данные и хеши паролей
+/backups
+
 # входящие файлы импорта (могут содержать чужие данные)
 /data/inbox/*
 !/data/inbox/.gitkeep

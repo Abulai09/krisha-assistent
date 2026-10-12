@@ -35,6 +35,10 @@ test.describe("управление", () => {
     await syntheticCard.getByRole("button", { name: "Обновить сейчас" }).click();
     await expect(syntheticCard.getByRole("alert")).toContainText("уже в очереди");
     await expect(page.locator("table").getByText("В очереди")).toBeVisible();
+
+    await page.getByRole("link", { name: "Журнал действий" }).click();
+    await expect(page.getByText("Обновление поставлено в очередь").first()).toBeVisible();
+    await expect(page.getByText("Вход администратора").first()).toBeVisible();
   });
 
   test("импорт: некорректный файл отклоняется с понятной ошибкой", async ({ page }) => {

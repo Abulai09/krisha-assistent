@@ -77,13 +77,37 @@ PostgreSQL в Docker уже настроен на `restart: unless-stopped`.
 
 ## Резервные копии
 
-```bash
-docker compose exec -T db pg_dump -U dealfinder deal_finder > backup-$(date +%F).sql
+`npm run backup` снимает копию схемы приложения из базы `DATABASE_URL` (локальной или Supabase) в `backups/`
+(формат pg_dump `-Fc`, хранятся 14 последних). Нужен запущенный Docker Desktop: pg_dump берётся из образа
+`postgres:17-alpine`, версия должна быть не старше сервера (у Supabase — PostgreSQL 17). В копии есть хеши паролей —
+папка `backups/` не попадает в git, храните её как секрет.
+
+Ежедневно в 03:00 через Планировщик заданий Windows (лог — `logs/backup.log`):
+
+```powershell
+schtasks /Create /TN "DealFinder Backup" /SC DAILY /ST 03:00 /F `
+  /TR "C:\Windows\System32\conhost.exe --headless cmd.exe /c \"C:\путь\к\krisha-assistent\scripts\backup.cmd\""
 ```
+
+Восстановление (`--clean` удалит существующие таблицы схемы перед загрузкой):
+
+```bash
+docker run --rm -i -e PGPASSWORD postgres:17-alpine pg_restore --clean --if-exists --no-owner \
+  -h <хост> -U <пользователь> -d <база> < backups/deal_finder-<дата>.dump
+```
+
+## Оповещение, если данные перестали обновляться
+
+`/api/health` открыт без входа и отвечает `200 {"status":"ok"}` или `503 {"status":"stale"}` — если источник из
+`SCHEDULED_SOURCES` не обновлялся дольше трёх интервалов worker'а или запуск идёт дольше часа (worker упал).
+Подключите бесплатный монитор (например, UptimeRobot, тип HTTP(s), интервал 30–60 мин) к
+`https://<сайт>/api/health` — он пришлёт письмо при ответе 503. То же предупреждение видно в «Управлении».
 
 ## Ограничения текущей версии
 
-- Ограничение попыток входа хранится в памяти процесса — при нескольких экземплярах сайта нужен общий стор.
-- Сессии администратора без хранения в БД: отозвать одну сессию нельзя, только все сразу (смена `SESSION_SECRET`).
+- Ограничение попыток входа — по адресу (10 неудач за 15 минут, таблица `LoginFailure`). Распределённый подбор
+  с многих адресов оно не остановит; пароль администратора защищён длиной (≥ 12) и медленным scrypt.
+- Выход, смена пароля или статуса завершают все сессии аккаунта (`User.sessionVersion`); на страницах сайта —
+  в течение 30 секунд (кэш proxy), в «Управлении» — сразу.
 - Полная Content-Security-Policy со `script-src` не настроена (нужны nonce для скриптов Next.js);
   выставлены `frame-ancestors`, `form-action`, `object-src`, `base-uri` и остальные защитные заголовки.

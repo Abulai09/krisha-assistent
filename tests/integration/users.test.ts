@@ -18,7 +18,9 @@ vi.mock("next/headers", () => ({
   headers: async () => new Headers(),
 }));
 
-const { currentUser, register, userLogin } = await import("@/server/auth/user");
+const { currentUser, register, userLogin, userLogout } = await import("@/server/auth/user");
+const { db } = await import("@/lib/db");
+const { MAX_FAILURES } = await import("@/server/auth/loginThrottle");
 const { listUsers, setUserStatus, deleteUser, upsertAdmin } = await import("@/server/services/userService");
 const { currentAdmin } = await import("@/server/auth/admin");
 
@@ -87,5 +89,32 @@ describe("пользователи", () => {
   it("занятый логин не регистрируется второй раз", async () => {
     await register({ login: "ivan", name: "Иван", password: PASSWORD });
     await expect(register({ login: "ivan", name: "Другой Иван", password: PASSWORD })).rejects.toThrow("Этот логин уже занят.");
+  });
+
+  it("выход завершает сессию на всех устройствах: старая cookie больше не пускает", async () => {
+    await upsertAdmin({ login: "boss", name: "Владелец", password: "admin-personal-pass" });
+    await userLogin({ login: "boss", password: "admin-personal-pass" });
+    const stolenCookie = jar.get("user_session")!;
+
+    await userLogout();
+    jar.set("user_session", stolenCookie);
+    expect(await currentUser()).toBeNull();
+  });
+
+  it("смена пароля администратора завершает его прежние сессии", async () => {
+    await upsertAdmin({ login: "boss", name: "Владелец", password: "admin-personal-pass" });
+    await userLogin({ login: "boss", password: "admin-personal-pass" });
+    await upsertAdmin({ login: "boss", name: "Владелец", password: "new-admin-password" });
+    expect(await currentUser()).toBeNull();
+  });
+
+  it("после серии неверных паролей адрес блокируется, а неудачи администратора попадают в журнал", async () => {
+    await upsertAdmin({ login: "boss", name: "Владелец", password: "admin-personal-pass" });
+    for (let i = 0; i < MAX_FAILURES; i++) await userLogin({ login: "boss", password: "guess-" + i });
+
+    const blocked = await userLogin({ login: "boss", password: "admin-personal-pass" });
+    expect(blocked.ok).toBe(false);
+    expect(blocked.ok ? "" : blocked.error).toContain("Слишком много");
+    expect(await db.auditLog.count({ where: { action: "ADMIN_LOGIN_FAILED" } })).toBe(MAX_FAILURES);
   });
 });

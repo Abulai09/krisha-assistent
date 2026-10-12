@@ -2,14 +2,17 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getSessionSecret, getSitePassword } from "@/config/env";
 import { errorMessage } from "@/lib/utils/async";
 import { logger } from "@/lib/utils/logger";
-import { ApprovalCache, canEnter } from "@/server/auth/siteGate";
+import { AccessCache, canEnter } from "@/server/auth/siteGate";
 import { USER_COOKIE_NAME } from "@/server/auth/user";
 import { findUserById } from "@/server/services/userService";
 
 // Закрывает весь сайт от тех, кого администратор не одобрил. Срабатывает до рендера страницы,
 // поэтому данные не попадают в ответ. «Управление» дополнительно проверяет роль ADMIN само (requireAdmin).
 
-const approvals = new ApprovalCache(async (userId) => (await findUserById(userId))?.status === "APPROVED");
+const accessCache = new AccessCache(async (userId) => {
+  const user = await findUserById(userId);
+  return user ? { approved: user.status === "APPROVED", sessionVersion: user.sessionVersion } : null;
+});
 
 export async function proxy(request: NextRequest) {
   const sessionSecret = getSessionSecret();
@@ -21,7 +24,7 @@ export async function proxy(request: NextRequest) {
       userCookie: request.cookies.get(USER_COOKIE_NAME)?.value,
       sessionSecret,
       now: new Date(),
-      isApproved: (userId) => approvals.isApproved(userId),
+      loadAccess: (userId) => accessCache.get(userId),
     });
     if (allowed) return NextResponse.next();
   } catch (error) {

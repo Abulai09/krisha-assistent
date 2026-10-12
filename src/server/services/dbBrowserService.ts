@@ -65,6 +65,18 @@ const TABLES = {
     page: (skip, take) => db.collectionRun.findMany({ orderBy: { requestedAt: "desc" }, skip, take }),
     remove: async (id) => (await db.collectionRun.deleteMany({ where: { id } })).count,
   },
+  AuditLog: {
+    label: "Журнал действий",
+    description: "Кто из администраторов что и когда сделал. Только просмотр: журнал не правится.",
+    count: () => db.auditLog.count(),
+    page: (skip, take) => db.auditLog.findMany({ orderBy: { at: "desc" }, skip, take }),
+  },
+  LoginFailure: {
+    label: "Неудачные входы",
+    description: "Неверные пароли по адресам за последние сутки — для ограничения подбора.",
+    count: () => db.loginFailure.count(),
+    page: (skip, take) => db.loginFailure.findMany({ orderBy: { at: "desc" }, skip, take }),
+  },
   WorkerHeartbeat: {
     label: "Пульс worker'а",
     description: "Последний сигнал «жив» от фонового процесса.",

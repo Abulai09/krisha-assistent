@@ -6,7 +6,7 @@ async function main() {
     throw new Error("reset-db: DATABASE_URL не похож на тестовую базу — очистка отменена");
   }
   await db.$executeRawUnsafe(
-    'TRUNCATE "ValuationComparable", "Valuation", "ListingPriceHistory", "Listing", "CollectionRun", "DataSource", "WorkerHeartbeat", "User" CASCADE',
+    'TRUNCATE "ValuationComparable", "Valuation", "ListingPriceHistory", "Listing", "CollectionRun", "DataSource", "WorkerHeartbeat", "User", "AuditLog", "LoginFailure" CASCADE',
   );
 }
 

@@ -302,15 +302,55 @@ enum UserRole {
 // кто может войти, решает администратор статусом. ADMIN входит только личным паролем (passwordHash, scrypt);
 // создаётся командой `npm run admin:create`, общий пароль к нему не подходит.
 model User {
-  id           String     @id @default(cuid())
+  id             String     @id @default(cuid())
   // Логин в нижнем регистре — уникален без учёта регистра.
-  login        String     @unique
-  name         String
-  role         UserRole   @default(USER)
-  passwordHash String?
-  status       UserStatus @default(PENDING)
-  createdAt    DateTime   @default(now())
-  lastLoginAt  DateTime?
+  login          String     @unique
+  name           String
+  role           UserRole   @default(USER)
+  passwordHash   String?
+  status         UserStatus @default(PENDING)
+  // Номер «поколения» сессий: входит в cookie. Увеличили — все прежние cookie этого аккаунта недействительны
+  // (выход, смена пароля, смена статуса).
+  sessionVersion Int        @default(0)
+  createdAt      DateTime   @default(now())
+  lastLoginAt    DateTime?
 
   @@index([status, createdAt])
+}
+
+enum AuditAction {
+  ADMIN_LOGIN
+  ADMIN_LOGIN_FAILED
+  ADMIN_PASSWORD_SET
+  USER_APPROVED
+  USER_BLOCKED
+  USER_DELETED
+  ROW_DELETED
+  RUN_ENQUEUED
+  IMPORT_UPLOADED
+}
+
+// Журнал действий администратора. Без внешнего ключа на User: запись остаётся, даже если аккаунт удалён.
+model AuditLog {
+  id         String      @id @default(cuid())
+  at         DateTime    @default(now())
+  actorId    String?
+  actorLogin String
+  action     AuditAction
+  // Над чем действие: «User:ivan», «Listing:cmv…», «krisha-web».
+  target     String?
+  ip         String?
+
+  @@index([at])
+}
+
+// Неудачные попытки входа по адресу — для ограничения подбора. В базе, а не в памяти: на Vercel много
+// копий сайта, у каждой своя память. Старше суток — удаляются.
+model LoginFailure {
+  id String   @id @default(cuid())
+  ip String
+  at DateTime @default(now())
+
+  @@index([ip, at])
+  @@index([at])
 }

@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { getEnv, getSitePassword, scheduledSourceKeys } from "@/config/env";
 import { formatDateTime } from "@/domain/format";
 import { db } from "@/lib/db";
+import { getDataHealth, type DataHealth } from "@/server/services/dataHealthService";
 import { getWorkerState } from "@/server/services/heartbeatService";
 import { listUsers } from "@/server/services/userService";
 import { listSchedulableSources } from "@/server/sources/registry";
@@ -34,11 +35,12 @@ async function AdminContent() {
 }
 
 async function AdminPanel() {
-  const [sources, runs, worker, users] = await Promise.all([
+  const [sources, runs, worker, users, health] = await Promise.all([
     db.dataSource.findMany(),
     db.collectionRun.findMany({ orderBy: { requestedAt: "desc" }, take: 20, include: { source: { select: { name: true } } } }),
     getWorkerState(),
     listUsers(),
+    getDataHealth(),
   ]);
   const sourcesByKey = new Map(sources.map((source) => [source.key, source]));
   const scheduled = new Set(scheduledSourceKeys());
@@ -58,6 +60,8 @@ async function AdminPanel() {
             </p>
           </div>
         )}
+
+        <DataHealthAlert health={health} />
 
         <UsersCard users={users} />
 
@@ -156,6 +160,29 @@ async function AdminPanel() {
         </Card>
       </div>
     </>
+  );
+}
+
+/** Сайт при поломке worker'а работает, но показывает старые данные — поэтому предупреждаем явно. */
+function DataHealthAlert({ health }: { health: DataHealth }) {
+  if (health.ok) return null;
+  return (
+    <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-sm">
+      <p className="font-medium text-destructive">Данные не обновляются</p>
+      <ul className="mt-1 list-disc space-y-0.5 pl-5 text-muted-foreground">
+        {health.staleSources.map((source) => (
+          <li key={source.key}>
+            Источник <span className="font-mono">{source.key}</span>: последнее успешное обновление —{" "}
+            {source.lastSuccessAt ? formatDateTime(source.lastSuccessAt) : "не было"} (норма — не реже раза в{" "}
+            {health.maxAgeHours} ч).
+          </li>
+        ))}
+        {health.stuckRuns > 0 && (
+          <li>Зависших запусков (идут дольше часа): {health.stuckRuns}. Скорее всего, worker упал во время обновления.</li>
+        )}
+      </ul>
+      <p className="mt-2 text-muted-foreground">Проверьте logs/worker.log на компьютере, где работает worker.</p>
+    </div>
   );
 }
 

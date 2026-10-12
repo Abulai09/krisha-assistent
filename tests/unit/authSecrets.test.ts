@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hashPassword, verifyPassword } from "@/server/auth/password";
-import { LoginRateLimiter, verifySitePassword } from "@/server/auth/session";
+import { verifySitePassword } from "@/server/auth/session";
 import { credentialsMatch } from "@/server/auth/credentials";
 
 describe("общий пароль сайта", () => {
@@ -28,26 +28,6 @@ describe("личный пароль администратора", () => {
     await expect(hashPassword("short")).rejects.toThrow("от 12");
     expect(await verifyPassword("anything-long-enough", null)).toBe(false);
     expect(await verifyPassword("anything-long-enough", "plain-text")).toBe(false);
-  });
-});
-
-describe("ограничение попыток входа", () => {
-  const NOW = new Date("2026-10-01T12:00:00Z").getTime();
-
-  it("блокирует после N неудач и разблокирует после окна", () => {
-    const limiter = new LoginRateLimiter(3, 60_000);
-    for (let i = 0; i < 3; i++) limiter.recordFailure("ip", NOW + i);
-    expect(limiter.isBlocked("ip", NOW + 10)).toBe(true);
-    expect(limiter.isBlocked("other-ip", NOW + 10)).toBe(false);
-    expect(limiter.isBlocked("ip", NOW + 61_000)).toBe(false);
-  });
-
-  it("успешный вход сбрасывает счётчик", () => {
-    const limiter = new LoginRateLimiter(2, 60_000);
-    limiter.recordFailure("ip", 1);
-    limiter.recordFailure("ip", 2);
-    limiter.reset("ip");
-    expect(limiter.isBlocked("ip", 3)).toBe(false);
   });
 });
 

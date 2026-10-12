@@ -55,15 +55,26 @@ export async function listUsers(): Promise<UserSummary[]> {
   return users.sort((a, b) => Number(b.status === "PENDING") - Number(a.status === "PENDING"));
 }
 
-/** Администратора из панели не блокируют и не удаляют — иначе можно закрыть доступ самому себе. */
+/**
+ * Администратора из панели не блокируют и не удаляют — иначе можно закрыть доступ самому себе.
+ * Смена статуса завершает прежние сессии: после разблокировки человек входит заново.
+ */
 export async function setUserStatus(id: string, status: UserStatus): Promise<void> {
-  const { count } = await db.user.updateMany({ where: { id, role: "USER" }, data: { status } });
+  const { count } = await db.user.updateMany({
+    where: { id, role: "USER" },
+    data: { status, sessionVersion: { increment: 1 } },
+  });
   if (count === 0) throw new UserError("Пользователь не найден или это администратор.");
 }
 
 export async function deleteUser(id: string): Promise<void> {
   const { count } = await db.user.deleteMany({ where: { id, role: "USER" } });
   if (count === 0) throw new UserError("Пользователь не найден или это администратор.");
+}
+
+/** Завершает все сессии аккаунта: прежние cookie перестают действовать. */
+export async function revokeSessions(id: string): Promise<void> {
+  await db.user.updateMany({ where: { id }, data: { sessionVersion: { increment: 1 } } });
 }
 
 /** Создаёт администратора или меняет пароль существующему. Обычного пользователя в админа не превращает. */
@@ -74,7 +85,11 @@ export async function upsertAdmin(input: { login: string; name: string; password
     throw new UserError(`Логин «${input.login}» занят обычным пользователем — выберите другой.`);
   }
   if (existing) {
-    await db.user.update({ where: { id: existing.id }, data: { name: input.name, passwordHash, status: "APPROVED" } });
+    // Новый пароль завершает все сессии администратора — в том числе украденные.
+    await db.user.update({
+      where: { id: existing.id },
+      data: { name: input.name, passwordHash, status: "APPROVED", sessionVersion: { increment: 1 } },
+    });
     return "updated";
   }
   await db.user.create({ data: { login: input.login, name: input.name, passwordHash, role: "ADMIN", status: "APPROVED" } });

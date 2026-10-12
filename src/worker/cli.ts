@@ -3,10 +3,12 @@ import { db } from "@/lib/db";
 import { errorMessage } from "@/lib/utils/async";
 import { ADMIN_PASSWORD_MIN_LENGTH } from "@/server/auth/password";
 import { runCollection, runRevaluation } from "@/server/services/collectionService";
+import { recordAudit } from "@/server/services/auditService";
 import { loginSchema, nameSchema, upsertAdmin } from "@/server/services/userService";
 import { FileImportSource } from "@/server/sources/fileImportSource";
 import { getSchedulableSource } from "@/server/sources/registry";
 import { askPassword } from "./askPassword";
+import { backupDatabase } from "./backup";
 import { processQueuedRun, runDueScheduledCollections, syncSourceStatuses } from "./tasks";
 
 // Разовые команды для ручного запуска и планировщиков ОС (cron, Планировщик заданий Windows).
@@ -16,7 +18,8 @@ const USAGE = `Использование:
   npm run import -- <файл.csv|json> импортировать объявления из файла
   npm run revalue                   пересчитать оценки без загрузки данных
   npm run worker:once               один цикл worker'а (очередь + плановые обновления)
-  npm run admin:create -- <логин> "<Имя>"  создать администратора или сменить ему пароль`;
+  npm run admin:create -- <логин> "<Имя>"  создать администратора или сменить ему пароль
+  npm run backup                    резервная копия схемы БД в backups/ (нужен Docker)`;
 
 async function main() {
   const [command, argument, extra] = process.argv.slice(2);
@@ -43,6 +46,9 @@ async function main() {
       for (const summary of await runDueScheduledCollections()) report(summary);
       return;
     }
+    case "backup":
+      console.log(`Копия сохранена: ${await backupDatabase()}`);
+      return;
     case "admin-create":
       return createAdmin(argument, extra);
     default:
@@ -62,7 +68,8 @@ ${USAGE}`);
   if (password.length < ADMIN_PASSWORD_MIN_LENGTH) return fail(`Пароль короче ${ADMIN_PASSWORD_MIN_LENGTH} символов.`);
   if ((await askPassword("Повторите пароль: ")) !== password) return fail("Пароли не совпадают.");
   const result = await upsertAdmin({ login: login.data, name: name.data, password });
-  console.log(result === "created" ? `Администратор «${login.data}» создан.` : `Пароль администратора «${login.data}» обновлён.`);
+  await recordAudit({ id: null, login: "cli" }, "ADMIN_PASSWORD_SET", `User:${login.data}`);
+  console.log(result === "created" ? `Администратор «${login.data}» создан.` : `Пароль администратора «${login.data}» обновлён, его прежние сессии завершены.`);
 }
 
 function report(summary: Awaited<ReturnType<typeof runCollection>>) {

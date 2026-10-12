@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 
 const TABS = [
   { href: "/admin", label: "Пользователи и обновления" },
+  { href: "/admin/audit", label: "Журнал действий" },
   { href: "/admin/db", label: "База данных" },
 ] as const;
 

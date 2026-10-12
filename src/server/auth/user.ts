@@ -1,41 +1,35 @@
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { getEnv, getSessionSecret, getSitePassword } from "@/config/env";
-import { findUserById, findUserByLogin, recordLogin, registerUser, type UserSummary } from "@/server/services/userService";
+import { recordAudit } from "@/server/services/auditService";
+import {
+  findUserById,
+  findUserByLogin,
+  recordLogin,
+  registerUser,
+  revokeSessions,
+  type UserSummary,
+} from "@/server/services/userService";
+import { clientAddress } from "./clientAddress";
 import { credentialsMatch } from "./credentials";
-import { ADMIN_SESSION_TTL_MS, createUserSessionValue, LoginRateLimiter, verifySitePassword, verifyUserSessionValue } from "./session";
+import { clearLoginFailures, isThrottled, recordLoginFailure } from "./loginThrottle";
+import { ADMIN_SESSION_TTL_MS, createUserSessionValue, verifySitePassword, verifyUserSessionValue } from "./session";
 
 export const USER_COOKIE_NAME = "user_session";
 
-// Неудачные попытки считаем по адресу и в целом — от подбора общего пароля и пароля администратора.
-const passwordLimiter = new LoginRateLimiter();
-const globalPasswordLimiter = new LoginRateLimiter(30);
-const GLOBAL_KEY = "*";
 const WRONG_CREDENTIALS = "Неверный логин или пароль.";
+const TOO_MANY: AuthResult = { ok: false, error: "Слишком много неудачных попыток с вашего адреса. Попробуйте через 15 минут." };
 
 export type AuthResult = { ok: true; message: string } | { ok: false; error: string };
 export type CurrentUser = UserSummary;
-
-async function rateLimited(now: Date): Promise<{ key: string; blocked: boolean }> {
-  const key = await clientAddress();
-  const time = now.getTime();
-  return { key, blocked: passwordLimiter.isBlocked(key, time) || globalPasswordLimiter.isBlocked(GLOBAL_KEY, time) };
-}
-
-function recordFailure(key: string, now: Date) {
-  passwordLimiter.recordFailure(key, now.getTime());
-  globalPasswordLimiter.recordFailure(GLOBAL_KEY, now.getTime());
-}
-
-const TOO_MANY: AuthResult = { ok: false, error: "Слишком много неудачных попыток. Попробуйте через 15 минут." };
 
 /** Заявка создаётся только с верным общим паролем; с неверным в базу ничего не пишется. */
 export async function register(input: { login: string; name: string; password: string }, now = new Date()): Promise<AuthResult> {
   const sitePassword = getSitePassword();
   if (!sitePassword) return { ok: false, error: "Регистрация выключена: на сервере не задан SITE_PASSWORD." };
-  const limit = await rateLimited(now);
-  if (limit.blocked) return TOO_MANY;
+  const ip = await clientAddress();
+  if (await isThrottled(ip, now)) return TOO_MANY;
   if (!verifySitePassword(input.password, sitePassword)) {
-    recordFailure(limit.key, now);
+    await recordLoginFailure(ip, now);
     return { ok: false, error: "Неверный пароль. Заявка не создана." };
   }
   await registerUser({ login: input.login, name: input.name });
@@ -49,23 +43,30 @@ export async function register(input: { login: string; name: string; password: s
 export async function userLogin(input: { login: string; password: string }, now = new Date()): Promise<AuthResult> {
   const sessionSecret = getSessionSecret();
   if (!sessionSecret) return { ok: false, error: "Вход выключен: на сервере не задан SESSION_SECRET." };
-  const limit = await rateLimited(now);
-  if (limit.blocked) return TOO_MANY;
+  const ip = await clientAddress();
+  if (await isThrottled(ip, now)) return TOO_MANY;
 
   const user = await findUserByLogin(input.login);
   if (!(await credentialsMatch(user, input.password, getSitePassword()))) {
-    recordFailure(limit.key, now);
+    await recordLoginFailure(ip, now);
+    if (user?.role === "ADMIN") await recordAudit({ id: user.id, login: user.login }, "ADMIN_LOGIN_FAILED", undefined, ip);
     return { ok: false, error: WRONG_CREDENTIALS };
   }
 
-  // Сюда доходят только с верным общим паролем — им можно подсказать, что не так с логином.
+  // Сюда доходят только с верным паролем — им можно подсказать, что не так с логином.
   if (!user) return { ok: false, error: "Такого логина нет. Сначала зарегистрируйтесь." };
   if (user.status === "PENDING") return { ok: false, error: "Заявка ещё не одобрена администратором." };
   if (user.status === "BLOCKED") return { ok: false, error: "Администратор закрыл вам доступ." };
 
-  passwordLimiter.reset(limit.key);
+  await clearLoginFailures(ip);
   await recordLogin(user.id, now);
-  const session = createUserSessionValue(sessionSecret, user.id, now, user.role === "ADMIN" ? ADMIN_SESSION_TTL_MS : undefined);
+  if (user.role === "ADMIN") await recordAudit({ id: user.id, login: user.login }, "ADMIN_LOGIN", undefined, ip);
+  const session = createUserSessionValue(
+    sessionSecret,
+    { userId: user.id, sessionVersion: user.sessionVersion },
+    now,
+    user.role === "ADMIN" ? ADMIN_SESSION_TTL_MS : undefined,
+  );
   (await cookies()).set(USER_COOKIE_NAME, session.value, {
     httpOnly: true,
     secure: getEnv().NODE_ENV === "production",
@@ -77,21 +78,27 @@ export async function userLogin(input: { login: string; password: string }, now 
   return { ok: true, message: "Вход выполнен." };
 }
 
-export async function userLogout(): Promise<void> {
+/**
+ * Выход завершает все сессии аккаунта, а не только удаляет cookie в этом браузере:
+ * если cookie украли, после выхода она тоже перестаёт действовать.
+ */
+export async function userLogout(now = new Date()): Promise<void> {
+  const claims = await sessionClaims(now);
+  if (claims) await revokeSessions(claims.userId);
   (await cookies()).delete(USER_COOKIE_NAME);
 }
 
-/** Текущий одобренный пользователь (с ролью) или null. Статус и роль — всегда свежие из базы. */
+/** Текущий одобренный пользователь (с ролью) или null. Статус, роль и версия сессий — всегда свежие из базы. */
 export async function currentUser(now = new Date()): Promise<CurrentUser | null> {
-  const sessionSecret = getSessionSecret();
-  if (!sessionSecret) return null;
-  const userId = verifyUserSessionValue((await cookies()).get(USER_COOKIE_NAME)?.value, sessionSecret, now);
-  if (!userId) return null;
-  const user = await findUserById(userId);
-  return user?.status === "APPROVED" ? user : null;
+  const claims = await sessionClaims(now);
+  if (!claims) return null;
+  const user = await findUserById(claims.userId);
+  if (user?.status !== "APPROVED" || user.sessionVersion !== claims.sessionVersion) return null;
+  return user;
 }
 
-async function clientAddress(): Promise<string> {
-  const headerList = await headers();
-  return headerList.get("x-forwarded-for")?.split(",")[0]?.trim() || headerList.get("x-real-ip") || "local";
+async function sessionClaims(now: Date) {
+  const sessionSecret = getSessionSecret();
+  if (!sessionSecret) return null;
+  return verifyUserSessionValue((await cookies()).get(USER_COOKIE_NAME)?.value, sessionSecret, now);
 }
