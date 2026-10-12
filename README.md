@@ -134,6 +134,7 @@ npm run worker              # в отдельном терминале: фоно
 | `npm run seed` | То же, что `collect -- synthetic` |
 | `npm run admin:create -- <логин> "<Имя>"` | Создать администратора или сменить ему пароль (завершает его сессии) |
 | `npm run backup` | Резервная копия схемы БД в `backups/` (нужен Docker), см. docs/deployment.md |
+| `npm run prune` | Удалить устаревшие данные сейчас (worker делает это сам раз в сутки), см. docs/deployment.md |
 | `npm run typecheck` / `lint` | Проверка типов / линтер |
 | `npm test` | Unit-тесты |
 | `npm run test:integration` | Интеграционные тесты (тестовая БД `deal_finder_test`) |

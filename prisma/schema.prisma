@@ -328,6 +328,7 @@ enum AuditAction {
   ROW_DELETED
   RUN_ENQUEUED
   IMPORT_UPLOADED
+  DATA_PRUNED
 }
 
 // Журнал действий администратора. Без внешнего ключа на User: запись остаётся, даже если аккаунт удалён.

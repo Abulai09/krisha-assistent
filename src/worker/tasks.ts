@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { errorMessage } from "@/lib/utils/async";
 import { logger } from "@/lib/utils/logger";
 import { ensureDataSource, runCollection, type CollectionSummary } from "@/server/services/collectionService";
+import { formatPruneSummary, pruneIfDue } from "@/server/services/retentionService";
 import { nextQueuedRun } from "@/server/services/runQueueService";
 import { getSchedulableSource, listSchedulableSources } from "@/server/sources/registry";
 
@@ -60,4 +61,10 @@ export async function runDueScheduledCollections(now = new Date()): Promise<Coll
     summaries.push(await runCollection({ source, trigger: "SCHEDULED", now }));
   }
   return summaries;
+}
+
+/** Раз в сутки удаляет устаревшие данные (сроки — src/domain/retention.ts). */
+export async function runDuePruning(now = new Date()): Promise<void> {
+  const summary = await pruneIfDue(now);
+  if (summary) logger.info("Автоочистка выполнена", { deleted: formatPruneSummary(summary) });
 }

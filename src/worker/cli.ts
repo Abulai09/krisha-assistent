@@ -9,7 +9,8 @@ import { FileImportSource } from "@/server/sources/fileImportSource";
 import { getSchedulableSource } from "@/server/sources/registry";
 import { askPassword } from "./askPassword";
 import { backupDatabase } from "./backup";
-import { processQueuedRun, runDueScheduledCollections, syncSourceStatuses } from "./tasks";
+import { formatPruneSummary, pruneStaleData } from "@/server/services/retentionService";
+import { processQueuedRun, runDuePruning, runDueScheduledCollections, syncSourceStatuses } from "./tasks";
 
 // Разовые команды для ручного запуска и планировщиков ОС (cron, Планировщик заданий Windows).
 
@@ -19,7 +20,8 @@ const USAGE = `Использование:
   npm run revalue                   пересчитать оценки без загрузки данных
   npm run worker:once               один цикл worker'а (очередь + плановые обновления)
   npm run admin:create -- <логин> "<Имя>"  создать администратора или сменить ему пароль
-  npm run backup                    резервная копия схемы БД в backups/ (нужен Docker)`;
+  npm run backup                    резервная копия схемы БД в backups/ (нужен Docker)
+  npm run prune                     удалить устаревшие данные сейчас (обычно worker делает это раз в сутки)`;
 
 async function main() {
   const [command, argument, extra] = process.argv.slice(2);
@@ -44,6 +46,13 @@ async function main() {
       const queued = await processQueuedRun();
       if (queued) report(queued);
       for (const summary of await runDueScheduledCollections()) report(summary);
+      await runDuePruning();
+      return;
+    }
+    case "prune": {
+      const summary = await pruneStaleData();
+      if (!summary) return fail("Сейчас выполняется обновление — повторите позже.");
+      console.log(`Удалено: ${formatPruneSummary(summary)}`);
       return;
     }
     case "backup":

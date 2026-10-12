@@ -4,7 +4,7 @@ import { errorMessage, sleep } from "@/lib/utils/async";
 import { logger } from "@/lib/utils/logger";
 import { failInterruptedRuns } from "@/server/services/collectionService";
 import { beat } from "@/server/services/heartbeatService";
-import { processQueuedRun, runDueScheduledCollections, syncSourceStatuses } from "./tasks";
+import { processQueuedRun, runDuePruning, runDueScheduledCollections, syncSourceStatuses } from "./tasks";
 
 // Постоянно работающий фоновый процесс: плановые обновления + ручные запуски из очереди.
 // Запуск: npm run worker. Остановка: Ctrl+C (текущая задача завершится корректно).
@@ -58,6 +58,7 @@ async function main() {
       await beat(startedAt, null);
       await runTask("Ручной запуск из очереди", processQueuedRun);
       if (!stopping) await runTask("Плановое обновление", runDueScheduledCollections);
+      if (!stopping) await runTask("Автоочистка", runDuePruning);
     } catch (error) {
       // Например, временная недоступность БД — пробуем снова на следующем шаге.
       logger.error("Ошибка цикла worker'а", { error: errorMessage(error) });
