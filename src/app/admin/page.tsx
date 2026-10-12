@@ -8,14 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getAdminSecrets, getEnv, scheduledSourceKeys } from "@/config/env";
+import { getAdminSecrets, getEnv, getSiteAccess, scheduledSourceKeys } from "@/config/env";
 import { formatDateTime } from "@/domain/format";
 import { db } from "@/lib/db";
 import { isAdmin } from "@/server/auth/admin";
 import { getWorkerState } from "@/server/services/heartbeatService";
+import { listUsers } from "@/server/services/userService";
 import { listSchedulableSources } from "@/server/sources/registry";
 import { logoutAction } from "./actions";
-import { LoginForm, RunSourceButton, UploadImportForm } from "./forms";
+import { LoginForm, RunSourceButton, UploadImportForm, UserActions } from "./forms";
 
 export const metadata: Metadata = { title: "Управление", robots: { index: false } };
 
@@ -67,10 +68,11 @@ async function AdminContent() {
 }
 
 async function AdminPanel() {
-  const [sources, runs, worker] = await Promise.all([
+  const [sources, runs, worker, users] = await Promise.all([
     db.dataSource.findMany(),
     db.collectionRun.findMany({ orderBy: { requestedAt: "desc" }, take: 20, include: { source: { select: { name: true } } } }),
     getWorkerState(),
+    listUsers(),
   ]);
   const sourcesByKey = new Map(sources.map((source) => [source.key, source]));
   const scheduled = new Set(scheduledSourceKeys());
@@ -99,6 +101,8 @@ async function AdminPanel() {
             </p>
           </div>
         )}
+
+        <UsersCard users={users} />
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Card>
@@ -195,6 +199,73 @@ async function AdminPanel() {
         </Card>
       </div>
     </>
+  );
+}
+
+const USER_STATUS_LABELS = { PENDING: "Ждёт одобрения", APPROVED: "Есть доступ", BLOCKED: "Доступ закрыт" } as const;
+
+function UsersCard({ users }: { users: Awaited<ReturnType<typeof listUsers>> }) {
+  const pending = users.filter((user) => user.status === "PENDING").length;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          Пользователи{pending > 0 && <Badge className="ml-2 align-middle">новых: {pending}</Badge>}
+        </CardTitle>
+        <CardDescription>
+          Пароль у всех один (SITE_PASSWORD). Войти могут только пользователи со статусом «Есть доступ». Вы как
+          администратор видите сайт без отдельного аккаунта. Блокировка действует в течение 30 секунд.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {!getSiteAccess() && (
+          <div role="status" className="rounded-xl border border-warning/40 bg-warning-muted p-4 text-sm">
+            <p className="font-medium">Сайт открыт всем</p>
+            <p className="text-muted-foreground">
+              Чтобы пускать только одобренных пользователей, задайте SITE_PASSWORD (от 8 символов) в .env и в настройках
+              Vercel.
+            </p>
+          </div>
+        )}
+        {users.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Заявок пока нет. Отправьте людям ссылку на страницу /register и пароль.</p>
+        ) : (
+          <div className="-mx-2 overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Имя и логин</TableHead>
+                  <TableHead>Статус</TableHead>
+                  <TableHead>Заявка</TableHead>
+                  <TableHead>Последний вход</TableHead>
+                  <TableHead>Действия</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {users.map((user) => (
+                  <TableRow key={user.id} className="align-top">
+                    <TableCell className="max-w-56 whitespace-normal">
+                      <p className="font-medium break-words">{user.name}</p>
+                      <p className="font-mono text-xs text-muted-foreground">{user.login}</p>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={user.status === "BLOCKED" ? "destructive" : user.status === "PENDING" ? "secondary" : "outline"}>
+                        {USER_STATUS_LABELS[user.status]}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">{formatDateTime(user.createdAt)}</TableCell>
+                    <TableCell className="whitespace-nowrap">{user.lastLoginAt ? formatDateTime(user.lastLoginAt) : "—"}</TableCell>
+                    <TableCell>
+                      <UserActions userId={user.id} status={user.status} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

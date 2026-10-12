@@ -2,7 +2,7 @@ import { cookies, headers } from "next/headers";
 import { getAdminSecrets, getEnv } from "@/config/env";
 import { createSessionValue, LoginRateLimiter, verifyAdminToken, verifySessionValue } from "./session";
 
-const COOKIE_NAME = "admin_session";
+export const ADMIN_COOKIE_NAME = "admin_session";
 const loginLimiter = new LoginRateLimiter();
 // X-Forwarded-For можно подделать без прокси, поэтому есть и общий лимит, не зависящий от заголовков.
 const globalLoginLimiter = new LoginRateLimiter(20);
@@ -18,7 +18,7 @@ export class AdminAuthError extends Error {
 export async function isAdmin(now = new Date()): Promise<boolean> {
   const secrets = getAdminSecrets();
   if (!secrets) return false;
-  const value = (await cookies()).get(COOKIE_NAME)?.value;
+  const value = (await cookies()).get(ADMIN_COOKIE_NAME)?.value;
   return verifySessionValue(value, secrets.sessionSecret, now);
 }
 
@@ -45,7 +45,7 @@ export async function login(token: string, now = new Date()): Promise<LoginResul
 
   loginLimiter.reset(clientKey);
   const session = createSessionValue(secrets.sessionSecret, now);
-  (await cookies()).set(COOKIE_NAME, session.value, {
+  (await cookies()).set(ADMIN_COOKIE_NAME, session.value, {
     httpOnly: true,
     secure: getEnv().NODE_ENV === "production",
     sameSite: "strict",
@@ -56,7 +56,7 @@ export async function login(token: string, now = new Date()): Promise<LoginResul
 }
 
 export async function logout(): Promise<void> {
-  (await cookies()).delete(COOKIE_NAME);
+  (await cookies()).delete(ADMIN_COOKIE_NAME);
 }
 
 async function clientAddress(): Promise<string> {

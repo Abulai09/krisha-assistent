@@ -286,3 +286,23 @@ model WorkerHeartbeat {
   lastBeatAt  DateTime
   currentTask String?
 }
+
+enum UserStatus {
+  PENDING // зарегистрировался, ждёт одобрения администратора
+  APPROVED
+  BLOCKED
+}
+
+// Пользователи сайта. Пароль один на всех (SITE_PASSWORD в .env), поэтому в таблице его нет:
+// кто может войти, решает администратор статусом.
+model User {
+  id          String     @id @default(cuid())
+  // Логин в нижнем регистре — уникален без учёта регистра.
+  login       String     @unique
+  name        String
+  status      UserStatus @default(PENDING)
+  createdAt   DateTime   @default(now())
+  lastLoginAt DateTime?
+
+  @@index([status, createdAt])
+}

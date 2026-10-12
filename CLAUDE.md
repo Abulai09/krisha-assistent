@@ -64,5 +64,8 @@ integration и E2E берут `DATABASE_URL_TEST` (БД создаёт `docker/i
 - Prisma 7: клиент генерируется в `src/generated/prisma` (импорт `@/generated/prisma/client`), подключение через
   `@prisma/adapter-pg`, URL — в `prisma.config.ts`.
 - Каждый Server Action админки начинается с `requireAdmin()` (внутри `guarded()` в `src/app/admin/actions.ts`).
+- Доступ к сайту: `src/proxy.ts` пускает только одобренных пользователей (`User.status`, общий `SITE_PASSWORD`) и
+  администратора; открыты `/login`, `/register`, `/admin` (`siteGate.ts`). Без `SITE_PASSWORD` сайт открыт — так
+  работают тесты. Новая публичная страница — добавить в `PUBLIC_PATHS`.
 - UI-тексты на русском, валюта ₸; адаптивные сетки — с `grid-cols-1`/`min-w-0`, иначе длинный текст даёт
   горизонтальную прокрутку на телефоне.

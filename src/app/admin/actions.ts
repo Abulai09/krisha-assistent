@@ -7,6 +7,7 @@ import { logger } from "@/lib/utils/logger";
 import { AdminAuthError, login, logout, requireAdmin } from "@/server/auth/admin";
 import { acceptImportUpload } from "@/server/services/importUploadService";
 import { enqueueManualRun, RunQueueError } from "@/server/services/runQueueService";
+import { deleteUser, setUserStatus, UserError } from "@/server/services/userService";
 import { InvalidImportFileError } from "@/server/sources/types";
 
 // Каждое действие само проверяет права: Server Action — это публичный POST-эндпоинт,
@@ -53,6 +54,23 @@ export async function uploadImportAction(_prev: ActionState, formData: FormData)
   });
 }
 
+const userActionSchema = z.object({
+  userId: z.string().regex(/^[a-z0-9]{1,64}$/),
+  action: z.enum(["approve", "block", "delete"]),
+});
+
+const USER_ACTION_MESSAGES = { approve: "Доступ открыт.", block: "Доступ закрыт.", delete: "Пользователь удалён." } as const;
+
+export async function userAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  return guarded(async () => {
+    const { userId, action } = userActionSchema.parse({ userId: formData.get("userId"), action: formData.get("action") });
+    if (action === "delete") await deleteUser(userId);
+    else await setUserStatus(userId, action === "approve" ? "APPROVED" : "BLOCKED");
+    revalidatePath("/admin");
+    return { status: "success", message: USER_ACTION_MESSAGES[action] };
+  });
+}
+
 /** Ожидаемые ошибки показываем пользователю, неожиданные — только в лог, без внутренних деталей. */
 async function guarded(action: () => Promise<ActionState>): Promise<ActionState> {
   try {
@@ -60,7 +78,7 @@ async function guarded(action: () => Promise<ActionState>): Promise<ActionState>
     return await action();
   } catch (error) {
     if (error instanceof AdminAuthError) return { status: "error", message: "Сессия истекла — войдите снова." };
-    if (error instanceof RunQueueError || error instanceof InvalidImportFileError) {
+    if (error instanceof RunQueueError || error instanceof InvalidImportFileError || error instanceof UserError) {
       return { status: "error", message: error.message };
     }
     if (error instanceof z.ZodError) return { status: "error", message: "Некорректный запрос." };

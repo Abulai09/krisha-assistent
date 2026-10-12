@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { enqueueRunAction, loginAction, uploadImportAction, type ActionState } from "./actions";
+import { enqueueRunAction, loginAction, uploadImportAction, userAction, type ActionState } from "./actions";
 
 const IDLE: ActionState = { status: "idle" };
 
@@ -67,6 +67,36 @@ export function UploadImportForm({ maxMb }: { maxMb: number }) {
       <Button type="submit" disabled={pending}>
         {pending ? "Проверяем файл…" : "Загрузить и импортировать"}
       </Button>
+    </form>
+  );
+}
+
+type UserStatusValue = "PENDING" | "APPROVED" | "BLOCKED";
+
+/** Кнопки управления доступом пользователя. Удаление — только у заблокированных, чтобы не удалить случайно. */
+export function UserActions({ userId, status }: { userId: string; status: UserStatusValue }) {
+  const [state, action, pending] = useActionState(userAction, IDLE);
+  return (
+    <form action={action} className="space-y-1">
+      <input type="hidden" name="userId" value={userId} />
+      <div className="flex flex-wrap gap-2">
+        {status !== "APPROVED" && (
+          <Button type="submit" name="action" value="approve" size="sm" disabled={pending}>
+            {status === "PENDING" ? "Одобрить" : "Разблокировать"}
+          </Button>
+        )}
+        {status !== "BLOCKED" && (
+          <Button type="submit" name="action" value="block" variant="outline" size="sm" disabled={pending}>
+            {status === "PENDING" ? "Отклонить" : "Заблокировать"}
+          </Button>
+        )}
+        {status === "BLOCKED" && (
+          <Button type="submit" name="action" value="delete" variant="ghost" size="sm" disabled={pending}>
+            Удалить
+          </Button>
+        )}
+      </div>
+      {state.status === "error" && <ActionMessage state={state} />}
     </form>
   );
 }

@@ -9,6 +9,7 @@ import type { ClientConfig } from "pg";
  * (в серверную функцию попадают только файлы, которые видит сборщик). Поэтому сертификат читаем здесь:
  * путь — от корня проекта (process.cwd(); на Vercel файл добавлен через outputFileTracingIncludes в next.config.ts),
  * проверка сервера остаётся полной. Те же параметры без изменений понимает `prisma migrate`.
+ * Файл ищется только в папке certs/: с произвольным путём сборщик Next.js включил бы в функцию весь проект.
  */
 export function pgConnectionConfig(url: string, readFile: (file: string) => string = readUtf8): ClientConfig {
   const parsed = new URL(url);
@@ -20,7 +21,7 @@ export function pgConnectionConfig(url: string, readFile: (file: string) => stri
   parsed.searchParams.delete("sslmode");
   return {
     connectionString: parsed.toString(),
-    ssl: { ca: readFile(path.resolve(process.cwd(), rootCert)), rejectUnauthorized: true },
+    ssl: { ca: readFile(path.join(process.cwd(), "certs", path.basename(rootCert))), rejectUnauthorized: true },
   };
 }
 

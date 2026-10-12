@@ -18,6 +18,8 @@ const envSchema = z.object({
   VERCEL: z.string().optional(),
   ADMIN_TOKEN: z.string().optional(),
   SESSION_SECRET: z.string().optional(),
+  /** Общий пароль для входа и регистрации пользователей. Не задан — сайт открыт всем. */
+  SITE_PASSWORD: z.string().optional(),
   WORKER_INTERVAL_MINUTES: z.coerce.number().int().min(5).max(24 * 60).default(60),
   MANUAL_RUN_COOLDOWN_MINUTES: z.coerce.number().int().min(1).max(24 * 60).default(5),
   /** Источники, которые worker обновляет по расписанию (ключи через запятую). */
@@ -53,6 +55,17 @@ export function getAdminSecrets(): { adminToken: string; sessionSecret: string }
   if (!ADMIN_TOKEN || ADMIN_TOKEN.length < 16) return null;
   if (!SESSION_SECRET || SESSION_SECRET.length < 32) return null;
   return { adminToken: ADMIN_TOKEN, sessionSecret: SESSION_SECRET };
+}
+
+/**
+ * Вход по общему паролю включён, если заданы SITE_PASSWORD (от 8 символов) и SESSION_SECRET.
+ * null — сайт открыт всем (как до появления пользователей; так работают тесты и локальная разработка).
+ */
+export function getSiteAccess(): { sitePassword: string; sessionSecret: string } | null {
+  const { SITE_PASSWORD, SESSION_SECRET } = getEnv();
+  if (!SITE_PASSWORD || SITE_PASSWORD.length < 8) return null;
+  if (!SESSION_SECRET || SESSION_SECRET.length < 32) return null;
+  return { sitePassword: SITE_PASSWORD, sessionSecret: SESSION_SECRET };
 }
 
 export function scheduledSourceKeys(): string[] {

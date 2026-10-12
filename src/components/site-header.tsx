@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { NavList } from "./nav-list";
 import { SiteNav } from "./site-nav";
+import { UserMenu } from "./user-menu";
 
 export function SiteHeader() {
   return (
@@ -12,6 +13,9 @@ export function SiteHeader() {
         </Link>
         <Suspense fallback={<NavList activePath={null} />}>
           <SiteNav />
+        </Suspense>
+        <Suspense fallback={null}>
+          <UserMenu />
         </Suspense>
       </div>
     </header>

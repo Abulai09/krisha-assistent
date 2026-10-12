@@ -36,6 +36,8 @@ export default defineConfig({
       DATABASE_URL: testDatabaseUrl,
       ADMIN_TOKEN: E2E_ADMIN_TOKEN,
       SESSION_SECRET: E2E_SESSION_SECRET,
+      // next start сам читает .env: пустой SITE_PASSWORD оставляет сайт открытым для тестов страниц.
+      SITE_PASSWORD: "",
       MANUAL_RUN_COOLDOWN_MINUTES: "5",
     },
   },

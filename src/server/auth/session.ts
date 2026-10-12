@@ -22,6 +22,9 @@ export function verifyAdminToken(input: string, adminToken: string): boolean {
   return input.length > 0 && input.length <= 512 && safeEqual(input, adminToken);
 }
 
+/** Общий пароль сайта проверяется так же: постоянное время, ограничение длины. */
+export const verifySitePassword = verifyAdminToken;
+
 export function createSessionValue(secret: string, now: Date): { value: string; expiresAt: Date } {
   const expiresAt = new Date(now.getTime() + SESSION_TTL_MS);
   const nonce = randomBytes(16).toString("base64url");
@@ -38,6 +41,30 @@ export function verifySessionValue(value: string | undefined, secret: string, no
   const payload = `${version}.${expiresAtRaw}.${nonce}`;
   if (!safeEqual(signature, sign(secret, `admin|${payload}`))) return false;
   return Number(expiresAtRaw) > now.getTime();
+}
+
+// Сессия пользователя сайта: в cookie — id пользователя и срок, подписанные HMAC с другой меткой («user|»),
+// поэтому её нельзя выдать за сессию администратора и наоборот. Статус (одобрен/заблокирован) cookie
+// не хранит — его проверяет proxy по базе, так блокировка действует сразу, а не после истечения срока.
+
+export const USER_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const USER_SESSION_VERSION = "u1";
+
+export function createUserSessionValue(secret: string, userId: string, now: Date): { value: string; expiresAt: Date } {
+  const expiresAt = new Date(now.getTime() + USER_SESSION_TTL_MS);
+  const payload = `${USER_SESSION_VERSION}.${userId}.${expiresAt.getTime()}`;
+  return { value: `${payload}.${sign(secret, `user|${payload}`)}`, expiresAt };
+}
+
+/** id пользователя из действительной cookie или null. */
+export function verifyUserSessionValue(value: string | undefined, secret: string, now: Date): string | null {
+  if (!value || value.length > 256) return null;
+  const parts = value.split(".");
+  if (parts.length !== 4) return null;
+  const [version, userId, expiresAtRaw, signature] = parts;
+  if (version !== USER_SESSION_VERSION || !/^[a-z0-9]{1,64}$/.test(userId) || !/^\d{13}$/.test(expiresAtRaw)) return null;
+  if (!safeEqual(signature, sign(secret, `user|${version}.${userId}.${expiresAtRaw}`))) return null;
+  return Number(expiresAtRaw) > now.getTime() ? userId : null;
 }
 
 /**

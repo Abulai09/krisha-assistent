@@ -3,7 +3,7 @@ import type { ListingSource, SourceStatus } from "@/server/sources/types";
 
 export async function resetDatabase() {
   await db.$executeRawUnsafe(
-    'TRUNCATE "ValuationComparable", "Valuation", "ListingPriceHistory", "Listing", "CollectionRun", "DataSource", "WorkerHeartbeat" CASCADE',
+    'TRUNCATE "ValuationComparable", "Valuation", "ListingPriceHistory", "Listing", "CollectionRun", "DataSource", "WorkerHeartbeat", "User" CASCADE',
   );
 }
 

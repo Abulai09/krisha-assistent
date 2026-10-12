@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => {
     cookieValue: undefined as string | undefined,
     enqueueManualRun: vi.fn(),
     acceptImportUpload: vi.fn(),
+    setUserStatus: vi.fn(),
+    deleteUser: vi.fn(),
   };
 });
 
@@ -27,9 +29,14 @@ vi.mock("@/server/services/runQueueService", () => ({
   enqueueManualRun: mocks.enqueueManualRun,
   RunQueueError: class RunQueueError extends Error {},
 }));
+vi.mock("@/server/services/userService", () => ({
+  setUserStatus: mocks.setUserStatus,
+  deleteUser: mocks.deleteUser,
+  UserError: class UserError extends Error {},
+}));
 vi.mock("@/server/services/importUploadService", () => ({ acceptImportUpload: mocks.acceptImportUpload }));
 
-const { enqueueRunAction, uploadImportAction } = await import("@/app/admin/actions");
+const { enqueueRunAction, uploadImportAction, userAction } = await import("@/app/admin/actions");
 const { createSessionValue } = await import("@/server/auth/session");
 
 const IDLE = { status: "idle" } as const;
@@ -49,6 +56,8 @@ function uploadForm() {
 beforeEach(() => {
   mocks.cookieValue = undefined;
   mocks.enqueueManualRun.mockReset().mockResolvedValue({ id: "run" });
+  mocks.setUserStatus.mockReset().mockResolvedValue(undefined);
+  mocks.deleteUser.mockReset().mockResolvedValue(undefined);
   mocks.acceptImportUpload.mockReset().mockResolvedValue({ runId: "run", total: 1, valid: 1, invalid: 0, sampleErrors: [] });
 });
 
@@ -89,5 +98,25 @@ describe("Server Actions админки", () => {
     const result = await enqueueRunAction(IDLE, new FormData());
     expect(result).toEqual({ status: "error", message: "Некорректный запрос." });
     expect(mocks.enqueueManualRun).not.toHaveBeenCalled();
+  });
+
+  it("без сессии администратора нельзя одобрить или удалить пользователя", async () => {
+    for (const action of ["approve", "delete"]) {
+      const form = new FormData();
+      form.set("userId", "user1");
+      form.set("action", action);
+      expect((await userAction(IDLE, form)).status).toBe("error");
+    }
+    expect(mocks.setUserStatus).not.toHaveBeenCalled();
+    expect(mocks.deleteUser).not.toHaveBeenCalled();
+  });
+
+  it("администратор одобряет пользователя", async () => {
+    mocks.cookieValue = createSessionValue(process.env.SESSION_SECRET!, new Date()).value;
+    const form = new FormData();
+    form.set("userId", "user1");
+    form.set("action", "approve");
+    expect(await userAction(IDLE, form)).toEqual({ status: "success", message: "Доступ открыт." });
+    expect(mocks.setUserStatus).toHaveBeenCalledWith("user1", "APPROVED");
   });
 });
