@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { CatalogFiltersForm } from "@/components/listing/catalog-filters";
 import { ListingCard } from "@/components/listing/listing-card";
+import { LinkPending } from "@/components/link-pending";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -114,11 +115,12 @@ function ModeTabs({ filters }: { filters: CatalogFilters }) {
               aria-current={active ? "true" : undefined}
               title={mode.title}
               className={cn(
-                "rounded-md px-3 py-1.5 text-sm whitespace-nowrap transition-colors",
+                "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm whitespace-nowrap transition-colors",
                 active ? "bg-background font-medium shadow-sm" : "text-muted-foreground hover:text-foreground",
               )}
             >
               {mode.label}
+              {!active && <LinkPending />}
             </Link>
           );
         })}
@@ -134,7 +136,9 @@ function Pagination({ filters, page, pageCount }: { filters: CatalogFilters; pag
     <nav aria-label="Страницы" className="flex items-center justify-between gap-2 pt-2">
       {page > 1 ? (
         <Button asChild variant="outline">
-          <Link href={href(page - 1)}>← Назад</Link>
+          <Link href={href(page - 1)}>
+            <LinkPending />← Назад
+          </Link>
         </Button>
       ) : (
         <span />
@@ -144,7 +148,9 @@ function Pagination({ filters, page, pageCount }: { filters: CatalogFilters; pag
       </span>
       {page < pageCount ? (
         <Button asChild variant="outline">
-          <Link href={href(page + 1)}>Дальше →</Link>
+          <Link href={href(page + 1)}>
+            Дальше →<LinkPending />
+          </Link>
         </Button>
       ) : (
         <span />
