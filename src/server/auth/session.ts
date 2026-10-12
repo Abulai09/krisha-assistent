@@ -1,11 +1,14 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
-// Чистые функции админ-сессии (без Next.js) — их легко покрыть тестами.
-// Сессия без хранения в БД: значение cookie подписано HMAC, подделать его без SESSION_SECRET нельзя.
-// Отзыв всех сессий — смена SESSION_SECRET (сервис рассчитан на одного администратора).
+// Чистые функции сессии (без Next.js) — их легко покрыть тестами.
+// Сессия без хранения в БД: в cookie — id пользователя и срок, подписанные HMAC; подделать её без
+// SESSION_SECRET нельзя. Роль и статус cookie не хранит — их каждый раз берут из базы, поэтому блокировка
+// действует сразу, а не после истечения срока. Отзыв всех сессий — смена SESSION_SECRET.
 
-export const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
-const SESSION_VERSION = "v1";
+export const USER_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/** Администратору — короче: украденная cookie админа опаснее. */
+export const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const USER_SESSION_VERSION = "u1";
 
 function sign(secret: string, payload: string): string {
   return createHmac("sha256", secret).update(payload).digest("base64url");
@@ -18,40 +21,18 @@ export function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(left, right);
 }
 
-export function verifyAdminToken(input: string, adminToken: string): boolean {
-  return input.length > 0 && input.length <= 512 && safeEqual(input, adminToken);
+/** Общий пароль сайта: постоянное время, ограничение длины. */
+export function verifySitePassword(input: string, sitePassword: string): boolean {
+  return input.length > 0 && input.length <= 512 && safeEqual(input, sitePassword);
 }
 
-/** Общий пароль сайта проверяется так же: постоянное время, ограничение длины. */
-export const verifySitePassword = verifyAdminToken;
-
-export function createSessionValue(secret: string, now: Date): { value: string; expiresAt: Date } {
-  const expiresAt = new Date(now.getTime() + SESSION_TTL_MS);
-  const nonce = randomBytes(16).toString("base64url");
-  const payload = `${SESSION_VERSION}.${expiresAt.getTime()}.${nonce}`;
-  return { value: `${payload}.${sign(secret, `admin|${payload}`)}`, expiresAt };
-}
-
-export function verifySessionValue(value: string | undefined, secret: string, now: Date): boolean {
-  if (!value || value.length > 256) return false;
-  const parts = value.split(".");
-  if (parts.length !== 4) return false;
-  const [version, expiresAtRaw, nonce, signature] = parts;
-  if (version !== SESSION_VERSION || !/^\d{13}$/.test(expiresAtRaw) || !nonce) return false;
-  const payload = `${version}.${expiresAtRaw}.${nonce}`;
-  if (!safeEqual(signature, sign(secret, `admin|${payload}`))) return false;
-  return Number(expiresAtRaw) > now.getTime();
-}
-
-// Сессия пользователя сайта: в cookie — id пользователя и срок, подписанные HMAC с другой меткой («user|»),
-// поэтому её нельзя выдать за сессию администратора и наоборот. Статус (одобрен/заблокирован) cookie
-// не хранит — его проверяет proxy по базе, так блокировка действует сразу, а не после истечения срока.
-
-export const USER_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const USER_SESSION_VERSION = "u1";
-
-export function createUserSessionValue(secret: string, userId: string, now: Date): { value: string; expiresAt: Date } {
-  const expiresAt = new Date(now.getTime() + USER_SESSION_TTL_MS);
+export function createUserSessionValue(
+  secret: string,
+  userId: string,
+  now: Date,
+  ttlMs = USER_SESSION_TTL_MS,
+): { value: string; expiresAt: Date } {
+  const expiresAt = new Date(now.getTime() + ttlMs);
   const payload = `${USER_SESSION_VERSION}.${userId}.${expiresAt.getTime()}`;
   return { value: `${payload}.${sign(secret, `user|${payload}`)}`, expiresAt };
 }

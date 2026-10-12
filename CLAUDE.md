@@ -27,7 +27,8 @@ npx playwright test --project=mobile                        # проекты: de
 После изменения `prisma/schema.prisma`: `npm run db:migrate:dev -- --name <name>`, затем `npx prisma generate`
 (Prisma 7 не генерирует клиент при migrate). После изменения алгоритма оценки: `npm run revalue`.
 
-`.env` (шаблон `.env.example`): без `ADMIN_TOKEN` (≥16 симв.) и `SESSION_SECRET` (≥32) админка отключена (сайт работает);
+`.env` (шаблон `.env.example`): без `SESSION_SECRET` (≥32) вход выключен (сайт работает); администратор —
+`npm run admin:create -- <логин> "<Имя>"`;
 integration и E2E берут `DATABASE_URL_TEST` (БД создаёт `docker/init-test-db.sql`, миграции катит globalSetup).
 
 ## Архитектура (подробно — docs/architecture.md)
@@ -63,9 +64,11 @@ integration и E2E берут `DATABASE_URL_TEST` (БД создаёт `docker/i
   сайт на Vercel — Transaction pooler (`DATABASE_POOL_MODE`, `urlForPoolMode()` в `src/lib/pgConfig.ts`).
 - Prisma 7: клиент генерируется в `src/generated/prisma` (импорт `@/generated/prisma/client`), подключение через
   `@prisma/adapter-pg`, URL — в `prisma.config.ts`.
-- Каждый Server Action админки начинается с `requireAdmin()` (внутри `guarded()` в `src/app/admin/actions.ts`).
-- Доступ к сайту: `src/proxy.ts` пускает только одобренных пользователей (`User.status`, общий `SITE_PASSWORD`) и
-  администратора; открыты `/login`, `/register`, `/admin` (`siteGate.ts`). Без `SITE_PASSWORD` сайт открыт — так
-  работают тесты. Новая публичная страница — добавить в `PUBLIC_PATHS`.
+- Доступ: `src/proxy.ts` пускает на сайт только одобренных (`User.status`); открыты `/login`, `/register`
+  (`PUBLIC_PATHS` в `siteGate.ts`). Без `SITE_PASSWORD` сайт открыт — так работают тесты. Роль ADMIN входит только
+  личным паролем (`credentialsMatch()` — закрыто по умолчанию), USER — только общим.
+- «Управление»: каждая страница начинается с `requireAdminPage()` (в самой странице, не в layout — они рендерятся
+  параллельно), каждый Server Action — с `requireAdmin()` (внутри `guarded()` в `src/app/admin/actions.ts`).
+  Просмотр БД — закрытый список таблиц в `dbBrowserService.ts`; хеш пароля не выбирается нигде (`omit`).
 - UI-тексты на русском, валюта ₸; адаптивные сетки — с `grid-cols-1`/`min-w-0`, иначе длинный текст даёт
   горизонтальную прокрутку на телефоне.

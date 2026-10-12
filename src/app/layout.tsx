@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Inter, Geist_Mono } from "next/font/google";
-import Link from "next/link";
 import { Suspense } from "react";
 import { DataRealmBanner } from "@/components/data-realm-banner";
 import { SiteHeader } from "@/components/site-header";
@@ -24,14 +23,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         </Suspense>
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:py-8">{children}</main>
         <footer className="border-t">
-          <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-4 text-xs text-muted-foreground sm:flex-row sm:justify-between">
+          <div className="mx-auto max-w-7xl px-4 py-4 text-xs text-muted-foreground">
             <p>
               Оценки основаны на ценах предложения и носят информационный характер. Это не инвестиционная рекомендация
               и не гарантия выгодной сделки.
             </p>
-            <Link href="/admin" className="shrink-0 hover:text-foreground">
-              Управление
-            </Link>
           </div>
         </footer>
       </body>

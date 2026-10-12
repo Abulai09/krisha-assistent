@@ -4,19 +4,18 @@ import { Suspense } from "react";
 import { RUN_STATUS_LABELS, RUN_TRIGGER_LABELS, SOURCE_STATUS_LABELS } from "@/components/labels";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getAdminSecrets, getEnv, getSiteAccess, scheduledSourceKeys } from "@/config/env";
+import { getEnv, getSitePassword, scheduledSourceKeys } from "@/config/env";
 import { formatDateTime } from "@/domain/format";
 import { db } from "@/lib/db";
-import { isAdmin } from "@/server/auth/admin";
 import { getWorkerState } from "@/server/services/heartbeatService";
 import { listUsers } from "@/server/services/userService";
 import { listSchedulableSources } from "@/server/sources/registry";
-import { logoutAction } from "./actions";
-import { LoginForm, RunSourceButton, UploadImportForm, UserActions } from "./forms";
+import { AdminTabs } from "./admin-tabs";
+import { RunSourceButton, UploadImportForm, UserActions } from "./forms";
+import { requireAdminPage } from "./guard";
 
 export const metadata: Metadata = { title: "Управление", robots: { index: false } };
 
@@ -30,40 +29,7 @@ export default function AdminPage() {
 
 async function AdminContent() {
   await connection();
-
-  if (!getAdminSecrets()) {
-    return (
-      <>
-        <PageHeader title="Управление" />
-        <Card className="max-w-xl">
-          <CardHeader>
-            <CardTitle>Управление отключено</CardTitle>
-            <CardDescription>
-              Задайте в .env переменные ADMIN_TOKEN (от 16 символов) и SESSION_SECRET (от 32 символов) и перезапустите
-              сервер. Пример генерации — в .env.example.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      </>
-    );
-  }
-
-  if (!(await isAdmin())) {
-    return (
-      <>
-        <PageHeader title="Управление" description="Ручной запуск обновления, импорт файлов и журнал запусков." />
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle>Вход администратора</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <LoginForm />
-          </CardContent>
-        </Card>
-      </>
-    );
-  }
-
+  await requireAdminPage();
   return <AdminPanel />;
 }
 
@@ -79,17 +45,8 @@ async function AdminPanel() {
 
   return (
     <>
-      <PageHeader
-        title="Управление"
-        description="Ручной запуск обновления, импорт файлов и журнал запусков."
-        actions={
-          <form action={logoutAction}>
-            <Button type="submit" variant="ghost" size="sm">
-              Выйти
-            </Button>
-          </form>
-        }
-      />
+      <PageHeader title="Управление" description="Пользователи, обновления данных, импорт и журнал запусков." />
+      <AdminTabs active="/admin" />
 
       <div className="space-y-6">
         {worker.state !== "RUNNING" && (
@@ -213,12 +170,13 @@ function UsersCard({ users }: { users: Awaited<ReturnType<typeof listUsers>> }) 
           Пользователи{pending > 0 && <Badge className="ml-2 align-middle">новых: {pending}</Badge>}
         </CardTitle>
         <CardDescription>
-          Пароль у всех один (SITE_PASSWORD). Войти могут только пользователи со статусом «Есть доступ». Вы как
-          администратор видите сайт без отдельного аккаунта. Блокировка действует в течение 30 секунд.
+          У пользователей общий пароль (SITE_PASSWORD), у администратора — личный. Войти могут только аккаунты со
+          статусом «Есть доступ». Блокировка действует в течение 30 секунд. Администратора здесь не блокируют и не
+          удаляют — это делается командой npm run admin:create.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {!getSiteAccess() && (
+        {!getSitePassword() && (
           <div role="status" className="rounded-xl border border-warning/40 bg-warning-muted p-4 text-sm">
             <p className="font-medium">Сайт открыт всем</p>
             <p className="text-muted-foreground">
@@ -245,7 +203,10 @@ function UsersCard({ users }: { users: Awaited<ReturnType<typeof listUsers>> }) 
                 {users.map((user) => (
                   <TableRow key={user.id} className="align-top">
                     <TableCell className="max-w-56 whitespace-normal">
-                      <p className="font-medium break-words">{user.name}</p>
+                      <p className="font-medium break-words">
+                        {user.name}
+                        {user.role === "ADMIN" && <Badge variant="secondary" className="ml-2 align-middle">Администратор</Badge>}
+                      </p>
                       <p className="font-mono text-xs text-muted-foreground">{user.login}</p>
                     </TableCell>
                     <TableCell>
@@ -256,7 +217,11 @@ function UsersCard({ users }: { users: Awaited<ReturnType<typeof listUsers>> }) 
                     <TableCell className="whitespace-nowrap">{formatDateTime(user.createdAt)}</TableCell>
                     <TableCell className="whitespace-nowrap">{user.lastLoginAt ? formatDateTime(user.lastLoginAt) : "—"}</TableCell>
                     <TableCell>
-                      <UserActions userId={user.id} status={user.status} />
+                      {user.role === "ADMIN" ? (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      ) : (
+                        <UserActions userId={user.id} status={user.status} />
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

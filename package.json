@@ -22,7 +22,8 @@
     "collect": "tsx --env-file-if-exists=.env src/worker/cli.ts collect",
     "import": "tsx --env-file-if-exists=.env src/worker/cli.ts import",
     "revalue": "tsx --env-file-if-exists=.env src/worker/cli.ts revalue",
-    "seed": "tsx --env-file-if-exists=.env src/worker/cli.ts collect synthetic"
+    "seed": "tsx --env-file-if-exists=.env src/worker/cli.ts collect synthetic",
+    "admin:create": "tsx --env-file-if-exists=.env src/worker/cli.ts admin-create"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",

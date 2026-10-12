@@ -63,8 +63,9 @@ PostgreSQL в Docker уже настроен на `restart: unless-stopped`.
 
 ## Обязательные переменные окружения
 
-См. `.env.example`. В production обязательно задайте уникальные `ADMIN_TOKEN` (≥ 16 символов) и
-`SESSION_SECRET` (≥ 32 символов). Смена `SESSION_SECRET` завершает все сессии администратора.
+См. `.env.example`. В production обязательно задайте уникальный `SESSION_SECRET` (≥ 32 символов) и `SITE_PASSWORD`
+(≥ 8), а администратора создайте командой `npm run admin:create -- <логин> "<Имя>"` (с `DATABASE_URL` рабочей базы).
+Смена `SESSION_SECRET` завершает все сессии.
 Сайт должен работать по HTTPS — cookie сессии в production помечается `Secure`.
 
 ## Проверка работы

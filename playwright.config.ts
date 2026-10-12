@@ -1,6 +1,6 @@
 import { config } from "dotenv";
 import { defineConfig, devices } from "@playwright/test";
-import { E2E_ADMIN_TOKEN, E2E_SESSION_SECRET } from "./tests/e2e/constants";
+import { E2E_SESSION_SECRET } from "./tests/e2e/constants";
 
 // E2E-тесты поднимают production-сборку на отдельном порту с ТЕСТОВОЙ базой (DATABASE_URL_TEST).
 // Рабочая база и dev-сервер (порт 3100) не затрагиваются.
@@ -34,7 +34,6 @@ export default defineConfig({
     reuseExistingServer: false,
     env: {
       DATABASE_URL: testDatabaseUrl,
-      ADMIN_TOKEN: E2E_ADMIN_TOKEN,
       SESSION_SECRET: E2E_SESSION_SECRET,
       // next start сам читает .env: пустой SITE_PASSWORD оставляет сайт открытым для тестов страниц.
       SITE_PASSWORD: "",

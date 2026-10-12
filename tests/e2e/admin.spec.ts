@@ -1,24 +1,30 @@
 import { expect, test, type Page } from "@playwright/test";
-import { E2E_ADMIN_TOKEN } from "./constants";
+import { E2E_ADMIN_LOGIN, E2E_ADMIN_PASSWORD } from "./constants";
 
-async function login(page: Page, token: string) {
-  await page.goto("/admin");
-  await page.getByLabel("Токен администратора").fill(token);
+async function login(page: Page, password = E2E_ADMIN_PASSWORD) {
+  await page.goto("/login");
+  await page.getByLabel("Логин").fill(E2E_ADMIN_LOGIN);
+  await page.getByLabel("Пароль").fill(password);
   await page.getByRole("button", { name: "Войти" }).click();
+  if (password === E2E_ADMIN_PASSWORD) {
+    await expect(page.getByRole("link", { name: "Управление" })).toBeVisible();
+    await page.goto("/admin");
+  }
 }
 
 test.describe.configure({ mode: "serial" });
 
 test.describe("управление", () => {
-  test("неверный токен не пускает в панель", async ({ page }) => {
-    await login(page, "wrong-token-value-123");
-    await expect(page.locator("form").getByRole("alert")).toHaveText("Неверный токен администратора.");
-    await expect(page.getByText("Журнал запусков", { exact: true })).toHaveCount(0);
-    await expect(page.getByLabel("Токен администратора")).toBeVisible();
+  test("без входа «Управление» отправляет на вход, неверный пароль не пускает", async ({ page }) => {
+    await page.goto("/admin");
+    await expect(page).toHaveURL(/\/login$/);
+    await login(page, "wrong-password-123");
+    await expect(page.locator("form").getByRole("alert")).toHaveText("Неверный логин или пароль.");
+    await expect(page.getByRole("link", { name: "Управление" })).toHaveCount(0);
   });
 
   test("вход, ручной запуск и ограничение частоты", async ({ page }) => {
-    await login(page, E2E_ADMIN_TOKEN);
+    await login(page);
     await expect(page.getByText("Журнал запусков", { exact: true })).toBeVisible();
     await expect(page.getByText("Фоновый процесс не запущен")).toBeVisible();
 
@@ -32,7 +38,7 @@ test.describe("управление", () => {
   });
 
   test("импорт: некорректный файл отклоняется с понятной ошибкой", async ({ page }) => {
-    await login(page, E2E_ADMIN_TOKEN);
+    await login(page);
     await page.getByLabel("Файл CSV или JSON").setInputFiles({
       name: "bad.csv",
       mimeType: "text/csv",
@@ -43,7 +49,7 @@ test.describe("управление", () => {
   });
 
   test("импорт: бинарный файл под видом CSV отклоняется", async ({ page }) => {
-    await login(page, E2E_ADMIN_TOKEN);
+    await login(page);
     await page.getByLabel("Файл CSV или JSON").setInputFiles({
       name: "image.csv",
       mimeType: "text/csv",
@@ -53,9 +59,20 @@ test.describe("управление", () => {
     await expect(page.locator("form").getByRole("alert")).toContainText("текстовым CSV или JSON");
   });
 
+  test("база данных: таблицы, строки и страницы", async ({ page }) => {
+    await login(page);
+    await page.getByRole("link", { name: "База данных" }).click();
+    await page.getByRole("link", { name: /Объявления/ }).click();
+    await expect(page.getByRole("heading", { name: /Объявления/ })).toBeVisible();
+    await expect(page.getByText(/Страница 1 из \d+/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Удалить" }).first()).toBeVisible();
+  });
+
   test("выход завершает сессию", async ({ page }) => {
-    await login(page, E2E_ADMIN_TOKEN);
+    await login(page);
     await page.getByRole("button", { name: "Выйти" }).click();
-    await expect(page.getByLabel("Токен администратора")).toBeVisible();
+    await expect(page).toHaveURL(/\/login$/);
+    await page.goto("/admin");
+    await expect(page).toHaveURL(/\/login$/);
   });
 });

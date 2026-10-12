@@ -1,9 +1,11 @@
-import { verifySessionValue, verifyUserSessionValue } from "./session";
+import { verifyUserSessionValue } from "./session";
 
 // Решение «пускать ли на страницу» — чистая функция, её проверяют unit-тесты. Вызывает её src/proxy.ts.
+// Proxy отвечает только за «вошёл ли одобренный пользователь»; права администратора проверяют сами
+// страницы и Server Actions «Управления» (requireAdmin).
 
-/** Страницы, открытые без входа: вход, регистрация и форма входа администратора. */
-const PUBLIC_PATHS = new Set(["/login", "/register", "/admin"]);
+/** Страницы, открытые без входа. */
+const PUBLIC_PATHS = new Set(["/login", "/register"]);
 
 export function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.has(pathname.replace(/\/+$/, "") || "/");
@@ -11,19 +13,14 @@ export function isPublicPath(pathname: string): boolean {
 
 export type GateInput = {
   pathname: string;
-  adminCookie: string | undefined;
   userCookie: string | undefined;
   sessionSecret: string;
-  /** Вход администратора включён (заданы ADMIN_TOKEN и SESSION_SECRET). */
-  adminEnabled: boolean;
   now: Date;
   isApproved: (userId: string) => Promise<boolean>;
 };
 
 export async function canEnter(input: GateInput): Promise<boolean> {
   if (isPublicPath(input.pathname)) return true;
-  // Администратор (вход токеном на /admin) видит весь сайт.
-  if (input.adminEnabled && verifySessionValue(input.adminCookie, input.sessionSecret, input.now)) return true;
   const userId = verifyUserSessionValue(input.userCookie, input.sessionSecret, input.now);
   return userId !== null && (await input.isApproved(userId));
 }

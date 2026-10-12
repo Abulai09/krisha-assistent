@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApprovalCache, canEnter, isPublicPath, type GateInput } from "@/server/auth/siteGate";
-import { createSessionValue, createUserSessionValue, USER_SESSION_TTL_MS, verifyUserSessionValue } from "@/server/auth/session";
+import { ADMIN_SESSION_TTL_MS, createUserSessionValue, USER_SESSION_TTL_MS, verifyUserSessionValue } from "@/server/auth/session";
 
 const SECRET = "s".repeat(40);
 const NOW = new Date("2026-10-12T12:00:00Z");
@@ -18,9 +18,16 @@ describe("сессия пользователя", () => {
     expect(verifyUserSessionValue(value, "x".repeat(40), NOW)).toBeNull();
   });
 
-  it("сессия администратора не принимается как пользовательская", () => {
-    const admin = createSessionValue(SECRET, NOW).value;
-    expect(verifyUserSessionValue(admin, SECRET, NOW)).toBeNull();
+  it("сессия администратора короче — 12 часов", () => {
+    const { value } = createUserSessionValue(SECRET, "admin1", NOW, ADMIN_SESSION_TTL_MS);
+    expect(verifyUserSessionValue(value, SECRET, new Date(NOW.getTime() + ADMIN_SESSION_TTL_MS - 1))).toBe("admin1");
+    expect(verifyUserSessionValue(value, SECRET, new Date(NOW.getTime() + ADMIN_SESSION_TTL_MS + 1))).toBeNull();
+  });
+
+  it("мусор вместо cookie не ломает проверку", () => {
+    for (const junk of [undefined, "", "a.b.c", "u1.id.notanumber.sig", "x".repeat(500)]) {
+      expect(verifyUserSessionValue(junk, SECRET, NOW)).toBeNull();
+    }
   });
 });
 
@@ -28,16 +35,15 @@ describe("кого пускать на сайт", () => {
   const userCookie = createUserSessionValue(SECRET, "user1", NOW).value;
   const base: GateInput = {
     pathname: "/listings",
-    adminCookie: undefined,
     userCookie: undefined,
     sessionSecret: SECRET,
-    adminEnabled: true,
     now: NOW,
     isApproved: async () => true,
   };
 
-  it("вход, регистрация и форма администратора открыты всем", async () => {
-    for (const path of ["/login", "/register/", "/admin"]) expect(await canEnter({ ...base, pathname: path })).toBe(true);
+  it("вход и регистрация открыты всем, «Управление» — нет", async () => {
+    for (const path of ["/login", "/register/"]) expect(await canEnter({ ...base, pathname: path })).toBe(true);
+    expect(await canEnter({ ...base, pathname: "/admin" })).toBe(false);
     expect(isPublicPath("/")).toBe(false);
     expect(isPublicPath("/login-fake")).toBe(false);
   });
@@ -50,12 +56,6 @@ describe("кого пускать на сайт", () => {
   it("одобренный пользователь проходит, ожидающий или заблокированный — нет", async () => {
     expect(await canEnter({ ...base, userCookie })).toBe(true);
     expect(await canEnter({ ...base, userCookie, isApproved: async () => false })).toBe(false);
-  });
-
-  it("администратор проходит без пользовательского аккаунта, если вход администратора включён", async () => {
-    const adminCookie = createSessionValue(SECRET, NOW).value;
-    expect(await canEnter({ ...base, adminCookie })).toBe(true);
-    expect(await canEnter({ ...base, adminCookie, adminEnabled: false })).toBe(false);
   });
 });
 

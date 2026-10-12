@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { errorMessage } from "@/lib/utils/async";
 import { logger } from "@/lib/utils/logger";
-import { AdminAuthError, login, logout, requireAdmin } from "@/server/auth/admin";
+import { AdminAuthError, requireAdmin } from "@/server/auth/admin";
+import { DbBrowserError, deleteRow, isTableName } from "@/server/services/dbBrowserService";
 import { acceptImportUpload } from "@/server/services/importUploadService";
 import { enqueueManualRun, RunQueueError } from "@/server/services/runQueueService";
 import { deleteUser, setUserStatus, UserError } from "@/server/services/userService";
@@ -14,20 +15,6 @@ import { InvalidImportFileError } from "@/server/sources/types";
 // его можно вызвать напрямую, минуя страницу.
 
 export type ActionState = { status: "idle" } | { status: "success"; message: string } | { status: "error"; message: string };
-
-export async function loginAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const token = formData.get("token");
-  if (typeof token !== "string" || token.length === 0) return { status: "error", message: "Введите токен администратора." };
-  const result = await login(token);
-  if (!result.ok) return { status: "error", message: result.error };
-  revalidatePath("/admin");
-  return { status: "success", message: "Вход выполнен." };
-}
-
-export async function logoutAction(): Promise<void> {
-  await logout();
-  revalidatePath("/admin");
-}
 
 const runSchema = z.object({ source: z.string().trim().min(1).max(50) });
 
@@ -71,14 +58,28 @@ export async function userAction(_prev: ActionState, formData: FormData): Promis
   });
 }
 
+const deleteRowSchema = z.object({
+  table: z.string().refine(isTableName),
+  id: z.string().min(1).max(100),
+});
+
+export async function deleteRowAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  return guarded(async () => {
+    const { table, id } = deleteRowSchema.parse({ table: formData.get("table"), id: formData.get("id") });
+    await deleteRow(table, id);
+    revalidatePath("/admin", "layout");
+    return { status: "success", message: "Строка удалена." };
+  });
+}
+
 /** Ожидаемые ошибки показываем пользователю, неожиданные — только в лог, без внутренних деталей. */
 async function guarded(action: () => Promise<ActionState>): Promise<ActionState> {
   try {
     await requireAdmin();
     return await action();
   } catch (error) {
-    if (error instanceof AdminAuthError) return { status: "error", message: "Сессия истекла — войдите снова." };
-    if (error instanceof RunQueueError || error instanceof InvalidImportFileError || error instanceof UserError) {
+    if (error instanceof AdminAuthError) return { status: "error", message: "Нужен вход администратора — войдите снова." };
+    if (error instanceof RunQueueError || error instanceof InvalidImportFileError || error instanceof UserError || error instanceof DbBrowserError) {
       return { status: "error", message: error.message };
     }
     if (error instanceof z.ZodError) return { status: "error", message: "Некорректный запрос." };

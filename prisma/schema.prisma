@@ -293,16 +293,24 @@ enum UserStatus {
   BLOCKED
 }
 
-// Пользователи сайта. Пароль один на всех (SITE_PASSWORD в .env), поэтому в таблице его нет:
-// кто может войти, решает администратор статусом.
+enum UserRole {
+  USER
+  ADMIN
+}
+
+// Пользователи сайта. USER входит по общему паролю (SITE_PASSWORD в .env), его пароля в таблице нет:
+// кто может войти, решает администратор статусом. ADMIN входит только личным паролем (passwordHash, scrypt);
+// создаётся командой `npm run admin:create`, общий пароль к нему не подходит.
 model User {
-  id          String     @id @default(cuid())
+  id           String     @id @default(cuid())
   // Логин в нижнем регистре — уникален без учёта регистра.
-  login       String     @unique
-  name        String
-  status      UserStatus @default(PENDING)
-  createdAt   DateTime   @default(now())
-  lastLoginAt DateTime?
+  login        String     @unique
+  name         String
+  role         UserRole   @default(USER)
+  passwordHash String?
+  status       UserStatus @default(PENDING)
+  createdAt    DateTime   @default(now())
+  lastLoginAt  DateTime?
 
   @@index([status, createdAt])
 }

@@ -9,5 +9,6 @@ export default function globalSetup() {
   const env = { ...process.env, DATABASE_URL: testUrl };
   execSync("npx prisma migrate deploy", { stdio: "pipe", env });
   execSync("npx tsx tests/e2e/reset-db.ts", { stdio: "inherit", env });
+  execSync("npx tsx tests/e2e/seed-admin.ts", { stdio: "inherit", env });
   execSync("npx tsx src/worker/cli.ts collect synthetic", { stdio: "pipe", env });
 }

@@ -19,7 +19,8 @@ vi.mock("next/headers", () => ({
 }));
 
 const { currentUser, register, userLogin } = await import("@/server/auth/user");
-const { listUsers, setUserStatus } = await import("@/server/services/userService");
+const { listUsers, setUserStatus, deleteUser, upsertAdmin } = await import("@/server/services/userService");
+const { currentAdmin } = await import("@/server/auth/admin");
 
 const PASSWORD = "shared-test-password";
 
@@ -48,10 +49,39 @@ describe("пользователи", () => {
     expect(await userLogin({ login: "ivan", password: PASSWORD })).toEqual({ ok: false, error: "Администратор закрыл вам доступ." });
   });
 
-  it("без верного пароля нельзя ни зарегистрироваться, ни узнать, есть ли логин", async () => {
-    expect(await register({ login: "petr", name: "Пётр", password: "wrong" })).toEqual({ ok: false, error: "Неверный пароль." });
+  it("с неверным общим паролем аккаунт не создаётся, а о логинах ничего не сообщается", async () => {
+    expect(await register({ login: "petr", name: "Пётр", password: "wrong" })).toEqual({
+      ok: false,
+      error: "Неверный пароль. Заявка не создана.",
+    });
     expect(await listUsers()).toHaveLength(0);
-    expect(await userLogin({ login: "nobody", password: "wrong" })).toEqual({ ok: false, error: "Неверный пароль." });
+    expect(await userLogin({ login: "nobody", password: "wrong" })).toEqual({ ok: false, error: "Неверный логин или пароль." });
+  });
+
+  it("администратор входит только личным паролем; общий пароль к нему не подходит", async () => {
+    expect(await upsertAdmin({ login: "boss", name: "Владелец", password: "admin-personal-pass" })).toBe("created");
+
+    expect(await userLogin({ login: "boss", password: PASSWORD })).toEqual({ ok: false, error: "Неверный логин или пароль." });
+    expect(jar.size).toBe(0);
+
+    expect(await userLogin({ login: "boss", password: "admin-personal-pass" })).toMatchObject({ ok: true });
+    expect((await currentAdmin())?.login).toBe("boss");
+    expect(await currentAdmin()).not.toHaveProperty("passwordHash");
+  });
+
+  it("обычный пользователь не становится администратором, а администратора не заблокировать из панели", async () => {
+    await register({ login: "ivan", name: "Иван", password: PASSWORD });
+    await expect(upsertAdmin({ login: "ivan", name: "Иван", password: "admin-personal-pass" })).rejects.toThrow("занят");
+
+    await upsertAdmin({ login: "boss", name: "Владелец", password: "admin-personal-pass" });
+    const admin = (await listUsers()).find((user) => user.role === "ADMIN")!;
+    await expect(setUserStatus(admin.id, "BLOCKED")).rejects.toThrow("администратор");
+    await expect(deleteUser(admin.id)).rejects.toThrow("администратор");
+
+    const [user] = (await listUsers()).filter((item) => item.role === "USER");
+    await setUserStatus(user.id, "APPROVED");
+    await userLogin({ login: "ivan", password: PASSWORD });
+    expect(await currentAdmin()).toBeNull();
   });
 
   it("занятый логин не регистрируется второй раз", async () => {

@@ -16,7 +16,7 @@ const envSchema = z.object({
   DATABASE_POOL_MODE: z.enum(["session", "transaction"]).optional(),
   /** Vercel выставляет VERCEL=1 в своих функциях. */
   VERCEL: z.string().optional(),
-  ADMIN_TOKEN: z.string().optional(),
+  /** Секрет подписи cookie сессий (от 32 символов). Без него вход на сайт и в «Управление» выключен. */
   SESSION_SECRET: z.string().optional(),
   /** Общий пароль для входа и регистрации пользователей. Не задан — сайт открыт всем. */
   SITE_PASSWORD: z.string().optional(),
@@ -49,23 +49,19 @@ export function getEnv(): ServerEnv {
   return cached;
 }
 
-/** Администрирование включено, только если заданы достаточно длинные секреты. */
-export function getAdminSecrets(): { adminToken: string; sessionSecret: string } | null {
-  const { ADMIN_TOKEN, SESSION_SECRET } = getEnv();
-  if (!ADMIN_TOKEN || ADMIN_TOKEN.length < 16) return null;
-  if (!SESSION_SECRET || SESSION_SECRET.length < 32) return null;
-  return { adminToken: ADMIN_TOKEN, sessionSecret: SESSION_SECRET };
+/** Секрет подписи сессий или null, если он не задан / слишком короткий (тогда вход выключен). */
+export function getSessionSecret(): string | null {
+  const { SESSION_SECRET } = getEnv();
+  return SESSION_SECRET && SESSION_SECRET.length >= 32 ? SESSION_SECRET : null;
 }
 
 /**
- * Вход по общему паролю включён, если заданы SITE_PASSWORD (от 8 символов) и SESSION_SECRET.
- * null — сайт открыт всем (как до появления пользователей; так работают тесты и локальная разработка).
+ * Общий пароль пользователей или null. null — сайт открыт всем (так работают тесты и локальная разработка),
+ * но «Управление» всё равно доступно только администратору.
  */
-export function getSiteAccess(): { sitePassword: string; sessionSecret: string } | null {
-  const { SITE_PASSWORD, SESSION_SECRET } = getEnv();
-  if (!SITE_PASSWORD || SITE_PASSWORD.length < 8) return null;
-  if (!SESSION_SECRET || SESSION_SECRET.length < 32) return null;
-  return { sitePassword: SITE_PASSWORD, sessionSecret: SESSION_SECRET };
+export function getSitePassword(): string | null {
+  const { SITE_PASSWORD } = getEnv();
+  return SITE_PASSWORD && SITE_PASSWORD.length >= 8 && getSessionSecret() ? SITE_PASSWORD : null;
 }
 
 export function scheduledSourceKeys(): string[] {

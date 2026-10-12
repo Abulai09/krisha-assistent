@@ -1,11 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { enqueueRunAction, loginAction, uploadImportAction, userAction, type ActionState } from "./actions";
+import { deleteRowAction, enqueueRunAction, uploadImportAction, userAction, type ActionState } from "./actions";
 
 const IDLE: ActionState = { status: "idle" };
 
@@ -15,25 +15,6 @@ function ActionMessage({ state }: { state: ActionState }) {
     <p role={state.status === "error" ? "alert" : "status"} className={cn("text-sm", state.status === "error" ? "text-destructive" : "text-positive")}>
       {state.message}
     </p>
-  );
-}
-
-export function LoginForm() {
-  const [state, action, pending] = useActionState(loginAction, IDLE);
-  return (
-    <form action={action} className="space-y-4">
-      <div className="space-y-1.5">
-        <Label htmlFor="token">Токен администратора</Label>
-        <Input id="token" name="token" type="password" autoComplete="current-password" required aria-describedby="token-hint" />
-        <p id="token-hint" className="text-xs text-muted-foreground">
-          Значение переменной ADMIN_TOKEN из файла .env.
-        </p>
-      </div>
-      <ActionMessage state={state} />
-      <Button type="submit" disabled={pending}>
-        {pending ? "Проверяем…" : "Войти"}
-      </Button>
-    </form>
   );
 }
 
@@ -96,6 +77,35 @@ export function UserActions({ userId, status }: { userId: string; status: UserSt
           </Button>
         )}
       </div>
+      {state.status === "error" && <ActionMessage state={state} />}
+    </form>
+  );
+}
+
+/** Удаление строки в два нажатия: без всплывающих окон браузера и без случайного удаления одним кликом. */
+export function DeleteRowButton({ table, id }: { table: string; id: string }) {
+  const [state, action, pending] = useActionState(deleteRowAction, IDLE);
+  const [confirming, setConfirming] = useState(false);
+  if (!confirming) {
+    return (
+      <div className="space-y-1">
+        <Button type="button" variant="ghost" size="sm" onClick={() => setConfirming(true)}>
+          Удалить
+        </Button>
+        {state.status === "error" && <ActionMessage state={state} />}
+      </div>
+    );
+  }
+  return (
+    <form action={action} className="flex items-center gap-1 whitespace-nowrap">
+      <input type="hidden" name="table" value={table} />
+      <input type="hidden" name="id" value={id} />
+      <Button type="submit" variant="destructive" size="sm" disabled={pending}>
+        {pending ? "Удаляем…" : "Точно удалить"}
+      </Button>
+      <Button type="button" variant="ghost" size="sm" onClick={() => setConfirming(false)}>
+        Отмена
+      </Button>
       {state.status === "error" && <ActionMessage state={state} />}
     </form>
   );

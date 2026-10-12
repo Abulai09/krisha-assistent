@@ -1,29 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Server Action — публичный POST-эндпоинт: его можно вызвать напрямую, минуя страницу.
-// Проверяем, что каждое действие само требует сессию администратора.
+// Проверяем, что каждое действие само требует вошедшего пользователя с ролью ADMIN.
 
 const mocks = vi.hoisted(() => {
   process.env.DATABASE_URL = "postgresql://unused";
-  process.env.ADMIN_TOKEN = "unit-test-admin-token-1234";
-  process.env.SESSION_SECRET = "unit-test-session-secret-0123456789abcdef";
   return {
-    cookieValue: undefined as string | undefined,
+    user: null as null | { id: string; role: "USER" | "ADMIN" },
     enqueueManualRun: vi.fn(),
     acceptImportUpload: vi.fn(),
     setUserStatus: vi.fn(),
     deleteUser: vi.fn(),
+    deleteRow: vi.fn(),
   };
 });
 
-vi.mock("next/headers", () => ({
-  cookies: async () => ({
-    get: () => (mocks.cookieValue === undefined ? undefined : { value: mocks.cookieValue }),
-    set: vi.fn(),
-    delete: vi.fn(),
-  }),
-  headers: async () => new Headers(),
-}));
+vi.mock("@/server/auth/user", () => ({ currentUser: async () => mocks.user }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/server/services/runQueueService", () => ({
   enqueueManualRun: mocks.enqueueManualRun,
@@ -34,89 +26,83 @@ vi.mock("@/server/services/userService", () => ({
   deleteUser: mocks.deleteUser,
   UserError: class UserError extends Error {},
 }));
+vi.mock("@/server/services/dbBrowserService", () => ({
+  deleteRow: mocks.deleteRow,
+  isTableName: (name: string) => ["Listing", "User"].includes(name),
+  DbBrowserError: class DbBrowserError extends Error {},
+}));
 vi.mock("@/server/services/importUploadService", () => ({ acceptImportUpload: mocks.acceptImportUpload }));
 
-const { enqueueRunAction, uploadImportAction, userAction } = await import("@/app/admin/actions");
-const { createSessionValue } = await import("@/server/auth/session");
+const { deleteRowAction, enqueueRunAction, uploadImportAction, userAction } = await import("@/app/admin/actions");
 
 const IDLE = { status: "idle" } as const;
+const NOT_ADMIN = { status: "error", message: "Нужен вход администратора — войдите снова." };
 
-function runForm() {
-  const form = new FormData();
-  form.set("source", "synthetic");
-  return form;
+function form(fields: Record<string, string>) {
+  const data = new FormData();
+  for (const [key, value] of Object.entries(fields)) data.set(key, value);
+  return data;
 }
 
 function uploadForm() {
-  const form = new FormData();
-  form.set("file", new File(["externalId\nA\n"], "a.csv", { type: "text/csv" }));
-  return form;
+  const data = new FormData();
+  data.set("file", new File(["externalId\nA\n"], "a.csv", { type: "text/csv" }));
+  return data;
 }
 
 beforeEach(() => {
-  mocks.cookieValue = undefined;
+  mocks.user = null;
   mocks.enqueueManualRun.mockReset().mockResolvedValue({ id: "run" });
+  mocks.acceptImportUpload.mockReset().mockResolvedValue({ runId: "run", total: 1, valid: 1, invalid: 0, sampleErrors: [] });
   mocks.setUserStatus.mockReset().mockResolvedValue(undefined);
   mocks.deleteUser.mockReset().mockResolvedValue(undefined);
-  mocks.acceptImportUpload.mockReset().mockResolvedValue({ runId: "run", total: 1, valid: 1, invalid: 0, sampleErrors: [] });
+  mocks.deleteRow.mockReset().mockResolvedValue(undefined);
 });
 
-describe("Server Actions админки", () => {
-  it("без сессии ручной запуск отклоняется и очередь не трогается", async () => {
-    const result = await enqueueRunAction(IDLE, runForm());
-    expect(result).toEqual({ status: "error", message: "Сессия истекла — войдите снова." });
+describe("Server Actions «Управления»", () => {
+  it("без входа ни одно действие не выполняется", async () => {
+    expect(await enqueueRunAction(IDLE, form({ source: "synthetic" }))).toEqual(NOT_ADMIN);
+    expect((await uploadImportAction(IDLE, uploadForm())).status).toBe("error");
+    expect(await userAction(IDLE, form({ userId: "user1", action: "approve" }))).toEqual(NOT_ADMIN);
+    expect(await deleteRowAction(IDLE, form({ table: "Listing", id: "x" }))).toEqual(NOT_ADMIN);
     expect(mocks.enqueueManualRun).not.toHaveBeenCalled();
-  });
-
-  it("без сессии загрузка файла отклоняется", async () => {
-    const result = await uploadImportAction(IDLE, uploadForm());
-    expect(result.status).toBe("error");
     expect(mocks.acceptImportUpload).not.toHaveBeenCalled();
-  });
-
-  it("поддельная cookie не даёт доступа", async () => {
-    mocks.cookieValue = `v1.${Date.now() + 3_600_000}.nonce.forged-signature`;
-    await enqueueRunAction(IDLE, runForm());
-    expect(mocks.enqueueManualRun).not.toHaveBeenCalled();
-  });
-
-  it("сессия, подписанная чужим секретом, не даёт доступа", async () => {
-    mocks.cookieValue = createSessionValue("attacker-secret-attacker-secret-0000", new Date()).value;
-    await uploadImportAction(IDLE, uploadForm());
-    expect(mocks.acceptImportUpload).not.toHaveBeenCalled();
-  });
-
-  it("с действующей сессией действие выполняется", async () => {
-    mocks.cookieValue = createSessionValue(process.env.SESSION_SECRET!, new Date()).value;
-    const result = await enqueueRunAction(IDLE, runForm());
-    expect(result.status).toBe("success");
-    expect(mocks.enqueueManualRun).toHaveBeenCalledWith("synthetic");
-  });
-
-  it("некорректные данные формы отклоняются даже с сессией", async () => {
-    mocks.cookieValue = createSessionValue(process.env.SESSION_SECRET!, new Date()).value;
-    const result = await enqueueRunAction(IDLE, new FormData());
-    expect(result).toEqual({ status: "error", message: "Некорректный запрос." });
-    expect(mocks.enqueueManualRun).not.toHaveBeenCalled();
-  });
-
-  it("без сессии администратора нельзя одобрить или удалить пользователя", async () => {
-    for (const action of ["approve", "delete"]) {
-      const form = new FormData();
-      form.set("userId", "user1");
-      form.set("action", action);
-      expect((await userAction(IDLE, form)).status).toBe("error");
-    }
     expect(mocks.setUserStatus).not.toHaveBeenCalled();
+    expect(mocks.deleteRow).not.toHaveBeenCalled();
+  });
+
+  it("обычный одобренный пользователь — не администратор", async () => {
+    mocks.user = { id: "user1", role: "USER" };
+    expect(await deleteRowAction(IDLE, form({ table: "Listing", id: "x" }))).toEqual(NOT_ADMIN);
+    expect(await userAction(IDLE, form({ userId: "user2", action: "delete" }))).toEqual(NOT_ADMIN);
+    expect(mocks.deleteRow).not.toHaveBeenCalled();
     expect(mocks.deleteUser).not.toHaveBeenCalled();
   });
 
-  it("администратор одобряет пользователя", async () => {
-    mocks.cookieValue = createSessionValue(process.env.SESSION_SECRET!, new Date()).value;
-    const form = new FormData();
-    form.set("userId", "user1");
-    form.set("action", "approve");
-    expect(await userAction(IDLE, form)).toEqual({ status: "success", message: "Доступ открыт." });
+  it("администратор ставит обновление в очередь и одобряет пользователя", async () => {
+    mocks.user = { id: "admin1", role: "ADMIN" };
+    expect((await enqueueRunAction(IDLE, form({ source: "synthetic" }))).status).toBe("success");
+    expect(mocks.enqueueManualRun).toHaveBeenCalledWith("synthetic");
+    expect(await userAction(IDLE, form({ userId: "user1", action: "approve" }))).toEqual({ status: "success", message: "Доступ открыт." });
     expect(mocks.setUserStatus).toHaveBeenCalledWith("user1", "APPROVED");
+  });
+
+  it("администратор удаляет строку только из известной таблицы", async () => {
+    mocks.user = { id: "admin1", role: "ADMIN" };
+    expect((await deleteRowAction(IDLE, form({ table: "Listing", id: "abc" }))).status).toBe("success");
+    expect(mocks.deleteRow).toHaveBeenCalledWith("Listing", "abc");
+
+    mocks.deleteRow.mockClear();
+    expect(await deleteRowAction(IDLE, form({ table: "pg_catalog.pg_user", id: "abc" }))).toEqual({
+      status: "error",
+      message: "Некорректный запрос.",
+    });
+    expect(mocks.deleteRow).not.toHaveBeenCalled();
+  });
+
+  it("некорректные данные формы отклоняются даже у администратора", async () => {
+    mocks.user = { id: "admin1", role: "ADMIN" };
+    expect(await enqueueRunAction(IDLE, new FormData())).toEqual({ status: "error", message: "Некорректный запрос." });
+    expect(mocks.enqueueManualRun).not.toHaveBeenCalled();
   });
 });
