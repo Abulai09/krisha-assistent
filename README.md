@@ -36,9 +36,14 @@
 (HTTP 468) останавливают запуск без повторов. Объявления, не встречавшиеся в выдаче 14 дней, помечаются
 «Давно не обновлялось на сайте» и не участвуют в оценке.
 
+## Стек
+
+Next.js 16 (App Router, React 19), TypeScript, Tailwind CSS 4 + shadcn/ui, PostgreSQL 17, Prisma 7 (`@prisma/adapter-pg`),
+zod, Vitest, Playwright. Фоновый worker — отдельный Node.js-процесс (`tsx`).
+
 ## Быстрый старт
 
-Нужны Node.js 22+, Docker Desktop.
+Нужны Node.js 22+, Docker Desktop (для локальной БД и тестов).
 
 ```bash
 npm install                 # зависимости + генерация Prisma Client
@@ -50,6 +55,41 @@ npm run seed                # загрузить синтетические те
 npm run dev                 # сайт на http://localhost:3100
 npm run worker              # в отдельном терминале: фоновые обновления 24/7
 ```
+
+На Windows вместо постоянного `npm run worker` можно поставить задачу в Планировщик —
+`scripts/worker-once.cmd` каждые 15 минут, лог в `logs/worker.log` (команда — в [docs/deployment.md](docs/deployment.md)).
+
+## База данных: локально или Supabase
+
+Адрес — `DATABASE_URL` в `.env`, схема — параметр `?schema=` в нём же.
+
+- **Локально (по умолчанию):** PostgreSQL в Docker, `localhost:5434`, схема `public`.
+- **Supabase:** только **Session pooler** (порт 5432) — Transaction pooler (6543) ломает блокировку
+  «одно обновление за раз». Таблицы — в своей схеме `deal_finder`: так они не смешиваются с другими приложениями
+  проекта и не попадают в публичный Data API Supabase. Соединение проверяется корневым сертификатом Supabase
+  из `certs/`. Пример строки — в `.env.example`; после смены адреса выполните `npm run db:migrate`.
+
+Тесты (integration, E2E) всегда работают с локальной `DATABASE_URL_TEST` и очищают её — рабочую базу не трогают.
+
+## Переменные окружения
+
+Полный шаблон с пояснениями — `.env.example`. Читаются и проверяются только в `src/config/env.ts`.
+
+| Переменная | По умолчанию | Назначение |
+| --- | --- | --- |
+| `DATABASE_URL` | — | Рабочая БД (обязательна) |
+| `DATABASE_URL_TEST` | — | БД для integration/E2E-тестов |
+| `ADMIN_TOKEN`, `SESSION_SECRET` | — | Вход в «Управление» (≥ 16 и ≥ 32 символов); без них админка выключена |
+| `SCHEDULED_SOURCES` | `synthetic` | Источники для worker'а через запятую, например `krisha-web` |
+| `WORKER_INTERVAL_MINUTES` | `60` | Как часто worker обновляет каждый источник |
+| `MANUAL_RUN_COOLDOWN_MINUTES` | `5` | Минимальный интервал между ручными запусками |
+| `KRISHA_WEB_ENABLED` | `false` | Включить сбор со страниц Krisha.kz |
+| `KRISHA_WEB_MAX_PAGES` | `5` | Страниц выдачи за запуск (1–20) |
+| `KRISHA_WEB_DELAY_MS` | `4000` | Пауза между страницами (≥ 2000) |
+| `IMPORT_MAX_FILE_MB`, `IMPORT_MAX_ROWS` | `5`, `20000` | Ограничения импорта CSV/JSON |
+
+Синтетические и реальные данные не смешиваются: как только в БД есть реальные объявления, сайт показывает только их.
+Поэтому для рабочей базы с Krisha.kz `synthetic` в `SCHEDULED_SOURCES` не нужен.
 
 ## Команды
 

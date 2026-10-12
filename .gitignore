@@ -10,47 +10,52 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
-
-# next.js
+# next.js / сборка
 /.next/
 /out/
-
-# production
 /build
+*.tsbuildinfo
+next-env.d.ts
 
-# misc
-.DS_Store
+# Prisma Client генерируется при npm install (postinstall)
+/src/generated/prisma
+
+# env: секреты (пароль БД, ADMIN_TOKEN, SESSION_SECRET) — только .env.example в git
+.env*
+!.env.example
+
+# ключи и сертификаты с секретами. certs/*.crt — публичный корневой сертификат Supabase, он в git
 *.pem
+*.key
 
-# debug
+# тесты
+/coverage
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# логи (logs/ — worker по расписанию, scripts/worker-once.cmd)
+/logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# входящие файлы импорта (могут содержать чужие данные)
+/data/inbox/*
+!/data/inbox/.gitkeep
+
+# личные настройки Claude Code (общие skills в .claude/skills — в git)
+.claude/settings.local.json
 
 # vercel
 .vercel
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-/src/generated/prisma
-
-!.env.example
-
-# playwright
-/test-results/
-/playwright-report/
-
-# import inbox
-/data/inbox/*
-!/data/inbox/.gitkeep
-
-# логи worker по расписанию (scripts/worker-once.cmd)
-/logs
+# ОС и редакторы
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+*.swp
