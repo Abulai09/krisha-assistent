@@ -1,7 +1,7 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import { PrismaClient } from "@/generated/prisma/client";
-import { getEnv } from "@/config/env";
+import { databasePoolSettings, getEnv } from "@/config/env";
 import { pgConnectionConfig } from "@/lib/pgConfig";
 
 // Один PrismaClient на процесс. В dev Next.js перезагружает модули — храним экземпляр в globalThis,
@@ -25,6 +25,7 @@ function createClient(): PrismaClient {
   // задаём его при открытии соединения (Supabase Session pooler этот параметр пропускает).
   const pool = new Pool({
     ...pgConnectionConfig(DATABASE_URL),
+    ...databasePoolSettings(),
     options: schema === "public" ? undefined : `-c search_path=${schema}`,
   });
   return new PrismaClient({ adapter: new PrismaPg(pool, { schema, disposeExternalPool: true }) });

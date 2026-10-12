@@ -79,6 +79,7 @@ npm run worker              # в отдельном терминале: фоно
 | --- | --- | --- |
 | `DATABASE_URL` | — | Рабочая БД (обязательна) |
 | `DATABASE_URL_TEST` | — | БД для integration/E2E-тестов |
+| `DATABASE_POOL_MAX` | Vercel: `2`, иначе `5` | Соединений с БД на процесс (у Supabase Session pooler всего 15 на проект) |
 | `ADMIN_TOKEN`, `SESSION_SECRET` | — | Вход в «Управление» (≥ 16 и ≥ 32 символов); без них админка выключена |
 | `SCHEDULED_SOURCES` | `synthetic` | Источники для worker'а через запятую, например `krisha-web` |
 | `WORKER_INTERVAL_MINUTES` | `60` | Как часто worker обновляет каждый источник |

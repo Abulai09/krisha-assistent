@@ -4,6 +4,13 @@ import { z } from "zod";
 
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL не задан"),
+  /**
+   * Соединений с БД на процесс. Supabase Session pooler держит всего 15 на весь проект (worker + все функции
+   * Vercel), поэтому по умолчанию: на Vercel — 2, иначе 5 (worker: 4 параллельных записи + блокировка — отдельно).
+   */
+  DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(20).optional(),
+  /** Vercel выставляет VERCEL=1 в своих функциях. */
+  VERCEL: z.string().optional(),
   ADMIN_TOKEN: z.string().optional(),
   SESSION_SECRET: z.string().optional(),
   WORKER_INTERVAL_MINUTES: z.coerce.number().int().min(5).max(24 * 60).default(60),
@@ -48,4 +55,11 @@ export function scheduledSourceKeys(): string[] {
     .SCHEDULED_SOURCES.split(",")
     .map((key) => key.trim())
     .filter(Boolean);
+}
+
+/** Настройки пула соединений: на Vercel — мало соединений и быстрое закрытие простаивающих. */
+export function databasePoolSettings(): { max: number; idleTimeoutMillis: number } {
+  const { DATABASE_POOL_MAX, VERCEL } = getEnv();
+  const serverless = Boolean(VERCEL);
+  return { max: DATABASE_POOL_MAX ?? (serverless ? 2 : 5), idleTimeoutMillis: serverless ? 10_000 : 30_000 };
 }
