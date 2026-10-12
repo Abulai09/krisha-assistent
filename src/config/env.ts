@@ -20,6 +20,8 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().optional(),
   /** Общий пароль для входа и регистрации пользователей. Не задан — сайт открыт всем. */
   SITE_PASSWORD: z.string().optional(),
+  /** Лимит размера базы для индикатора в «Управлении»: бесплатный тариф Supabase — 500 МБ. */
+  DATABASE_SIZE_LIMIT_MB: z.coerce.number().int().min(1).default(500),
   WORKER_INTERVAL_MINUTES: z.coerce.number().int().min(5).max(24 * 60).default(60),
   MANUAL_RUN_COOLDOWN_MINUTES: z.coerce.number().int().min(1).max(24 * 60).default(5),
   /** Источники, которые worker обновляет по расписанию (ключи через запятую). */

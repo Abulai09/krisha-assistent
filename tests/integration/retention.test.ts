@@ -88,3 +88,19 @@ describe("автоочистка", () => {
     }
   });
 });
+
+describe("отчёт о месте в базе", () => {
+  it("показывает размер базы, таблиц и время последней очистки", async () => {
+    const { getStorageReport } = await import("@/server/services/storageService");
+    expect((await getStorageReport()).lastPrune).toBeNull();
+
+    await pruneStaleData(NOW);
+    const report = await getStorageReport();
+
+    expect(report.databaseBytes).toBeGreaterThan(0);
+    expect(report.tableBytes.Listing).toBeGreaterThan(0);
+    expect(report.appBytes).toBeLessThanOrEqual(report.databaseBytes);
+    expect(report.lastPrune?.at).toEqual(NOW);
+    expect(report.nextPruneAt).toEqual(new Date(NOW.getTime() + DAY));
+  });
+});

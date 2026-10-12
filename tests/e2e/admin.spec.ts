@@ -66,6 +66,8 @@ test.describe("управление", () => {
   test("база данных: таблицы, строки и страницы", async ({ page }) => {
     await login(page);
     await page.getByRole("link", { name: "База данных" }).click();
+    await expect(page.getByRole("progressbar", { name: "Заполненность базы" })).toBeVisible();
+    await expect(page.getByText("Автоочистка", { exact: true })).toBeVisible();
     await page.getByRole("link", { name: /Объявления/ }).click();
     await expect(page.getByRole("heading", { name: /Объявления/ })).toBeVisible();
     await expect(page.getByText(/Страница 1 из \d+/)).toBeVisible();
