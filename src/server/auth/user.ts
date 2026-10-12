@@ -22,18 +22,24 @@ const TOO_MANY: AuthResult = { ok: false, error: "Слишком много не
 export type AuthResult = { ok: true; message: string } | { ok: false; error: string };
 export type CurrentUser = UserSummary;
 
-/** Заявка создаётся только с верным общим паролем; с неверным в базу ничего не пишется. */
+/**
+ * Аккаунт создаётся только с верным общим паролем (с неверным в базу ничего не пишется) и сразу получает доступ:
+ * одобрение администратором выключено. Закрыть доступ можно блокировкой в «Управлении».
+ */
 export async function register(input: { login: string; name: string; password: string }, now = new Date()): Promise<AuthResult> {
   const sitePassword = getSitePassword();
-  if (!sitePassword) return { ok: false, error: "Регистрация выключена: на сервере не задан SITE_PASSWORD." };
+  const sessionSecret = getSessionSecret();
+  if (!sitePassword || !sessionSecret) return { ok: false, error: "Регистрация выключена: на сервере не задан SITE_PASSWORD." };
   const ip = await clientAddress();
   if (await isThrottled(ip, now)) return TOO_MANY;
   if (!verifySitePassword(input.password, sitePassword)) {
     await recordLoginFailure(ip, now);
-    return { ok: false, error: "Неверный пароль. Заявка не создана." };
+    return { ok: false, error: "Неверный пароль. Аккаунт не создан." };
   }
-  await registerUser({ login: input.login, name: input.name });
-  return { ok: true, message: "Заявка отправлена. Войти можно будет после одобрения администратором." };
+  const user = await registerUser({ login: input.login, name: input.name });
+  await recordLogin(user.id, now);
+  await startSession(sessionSecret, user, now);
+  return { ok: true, message: "Аккаунт создан." };
 }
 
 /**
@@ -61,6 +67,11 @@ export async function userLogin(input: { login: string; password: string }, now 
   await clearLoginFailures(ip);
   await recordLogin(user.id, now);
   if (user.role === "ADMIN") await recordAudit({ id: user.id, login: user.login }, "ADMIN_LOGIN", undefined, ip);
+  await startSession(sessionSecret, user, now);
+  return { ok: true, message: "Вход выполнен." };
+}
+
+async function startSession(sessionSecret: string, user: { id: string; role: string; sessionVersion: number }, now: Date) {
   const session = createUserSessionValue(
     sessionSecret,
     { userId: user.id, sessionVersion: user.sessionVersion },
@@ -75,7 +86,6 @@ export async function userLogin(input: { login: string; password: string }, now 
     path: "/",
     expires: session.expiresAt,
   });
-  return { ok: true, message: "Вход выполнен." };
 }
 
 /**

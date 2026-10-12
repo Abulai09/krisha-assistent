@@ -69,7 +69,7 @@ export function RegisterForm() {
       <PasswordField />
       <FormMessage state={state} />
       <Button type="submit" className="w-full" disabled={pending}>
-        {pending ? "Отправляем…" : "Отправить заявку"}
+        {pending ? "Создаём аккаунт…" : "Зарегистрироваться"}
       </Button>
     </form>
   );

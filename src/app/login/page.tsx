@@ -10,7 +10,7 @@ export default function LoginPage() {
     <Card className="mx-auto w-full max-w-sm">
       <CardHeader>
         <CardTitle>Вход</CardTitle>
-        <CardDescription>Сайт доступен пользователям, которых одобрил администратор.</CardDescription>
+        <CardDescription>Войдите логином и общим паролем.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <UserLoginForm />

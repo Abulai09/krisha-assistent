@@ -196,7 +196,7 @@ function UsersCard({ users }: { users: Awaited<ReturnType<typeof listUsers>> }) 
           <div role="status" className="rounded-xl border border-warning/40 bg-warning-muted p-4 text-sm">
             <p className="font-medium">Сайт открыт всем</p>
             <p className="text-muted-foreground">
-              Чтобы пускать только одобренных пользователей, задайте SITE_PASSWORD (от 8 символов) в .env и в настройках
+              Чтобы пускать только зарегистрированных по общему паролю, задайте SITE_PASSWORD (от 8 символов) в .env и в настройках
               Vercel.
             </p>
           </div>

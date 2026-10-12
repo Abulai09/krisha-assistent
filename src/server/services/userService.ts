@@ -4,7 +4,8 @@ import { db } from "@/lib/db";
 import { hashPassword } from "@/server/auth/password";
 
 // Пользователи сайта. USER: пароль общий (SITE_PASSWORD), поэтому хранится только логин, имя и статус:
-// PENDING — ждёт одобрения, APPROVED — может входить, BLOCKED — вход закрыт.
+// APPROVED — может входить (так создаётся при регистрации), BLOCKED — вход закрыт.
+// PENDING — «ждёт одобрения»: сейчас при регистрации не используется, одобрение админом выключено.
 // ADMIN: личный пароль (хеш), создаётся только командой `npm run admin:create`, из панели его не изменить.
 
 export const loginSchema = z
@@ -26,7 +27,7 @@ export class UserError extends Error {
 
 export async function registerUser(input: { login: string; name: string }): Promise<User> {
   try {
-    return await db.user.create({ data: { login: input.login, name: input.name } });
+    return await db.user.create({ data: { login: input.login, name: input.name, status: "APPROVED" } });
   } catch (error) {
     // Уникальный индекс по логину: два одновременных запроса не создадут дубликат.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {

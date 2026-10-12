@@ -32,7 +32,8 @@ export async function registerAction(_prev: FormState, formData: FormData): Prom
   const parsed = registerForm.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0].message };
   const result = await safely(() => register(parsed.data));
-  return result.ok ? { status: "success", message: result.message } : { status: "error", message: result.error };
+  if (!result.ok) return { status: "error", message: result.error };
+  redirect("/");
 }
 
 export async function logoutUserAction(): Promise<void> {

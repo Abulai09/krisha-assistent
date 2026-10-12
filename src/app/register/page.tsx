@@ -10,12 +10,12 @@ export default function RegisterPage() {
     <Card className="mx-auto w-full max-w-sm">
       <CardHeader>
         <CardTitle>Регистрация</CardTitle>
-        <CardDescription>Пароль выдаёт администратор. После заявки дождитесь одобрения — затем можно войти.</CardDescription>
+        <CardDescription>Общий пароль выдаёт администратор. После регистрации вы сразу попадёте на сайт.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <RegisterForm />
         <p className="text-sm text-muted-foreground">
-          Уже одобрены?{" "}
+          Уже есть аккаунт?{" "}
           <Link href="/login" className="font-medium text-foreground underline underline-offset-4">
             Войти
           </Link>

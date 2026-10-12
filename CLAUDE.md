@@ -66,7 +66,8 @@ integration и E2E берут `DATABASE_URL_TEST` (БД создаёт `docker/i
   соединения блокировки — `keepAlive` и обработчик `'error'` (без него обрыв простаивающего соединения роняет процесс).
 - Prisma 7: клиент генерируется в `src/generated/prisma` (импорт `@/generated/prisma/client`), подключение через
   `@prisma/adapter-pg`, URL — в `prisma.config.ts`.
-- Доступ: `src/proxy.ts` пускает на сайт только одобренных (`User.status`); открыты `/login`, `/register`
+- Доступ: `src/proxy.ts` пускает на сайт только аккаунты со статусом APPROVED; регистрация с верным общим паролем
+  сразу создаёт APPROVED и входит (одобрение админом выключено, PENDING не используется); открыты `/login`, `/register`
   (`PUBLIC_PATHS` в `siteGate.ts`). Без `SITE_PASSWORD` сайт открыт — так работают тесты. Роль ADMIN входит только
   личным паролем (`credentialsMatch()` — закрыто по умолчанию), USER — только общим.
 - «Управление»: каждая страница начинается с `requireAdminPage()` (в самой странице, не в layout — они рендерятся

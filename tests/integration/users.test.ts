@@ -32,19 +32,16 @@ beforeEach(async () => {
 });
 
 describe("пользователи", () => {
-  it("заявка → одобрение → вход → блокировка", async () => {
+  it("регистрация сразу даёт доступ и входит; вход повторно; блокировка закрывает", async () => {
     expect(await register({ login: "ivan", name: "Иван", password: PASSWORD })).toMatchObject({ ok: true });
+    expect((await currentUser())?.login).toBe("ivan");
 
-    expect(await userLogin({ login: "ivan", password: PASSWORD })).toEqual({
-      ok: false,
-      error: "Заявка ещё не одобрена администратором.",
-    });
-    expect(jar.size).toBe(0);
-
-    const [user] = await listUsers();
-    await setUserStatus(user.id, "APPROVED");
+    jar.clear();
     expect(await userLogin({ login: "ivan", password: PASSWORD })).toMatchObject({ ok: true });
     expect((await currentUser())?.login).toBe("ivan");
+
+    const [user] = await listUsers();
+    expect(user.status).toBe("APPROVED");
 
     await setUserStatus(user.id, "BLOCKED");
     expect(await currentUser()).toBeNull();
@@ -54,7 +51,7 @@ describe("пользователи", () => {
   it("с неверным общим паролем аккаунт не создаётся, а о логинах ничего не сообщается", async () => {
     expect(await register({ login: "petr", name: "Пётр", password: "wrong" })).toEqual({
       ok: false,
-      error: "Неверный пароль. Заявка не создана.",
+      error: "Неверный пароль. Аккаунт не создан.",
     });
     expect(await listUsers()).toHaveLength(0);
     expect(await userLogin({ login: "nobody", password: "wrong" })).toEqual({ ok: false, error: "Неверный логин или пароль." });
