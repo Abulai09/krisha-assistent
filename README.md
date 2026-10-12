@@ -64,8 +64,10 @@ npm run worker              # в отдельном терминале: фоно
 Адрес — `DATABASE_URL` в `.env`, схема — параметр `?schema=` в нём же.
 
 - **Локально (по умолчанию):** PostgreSQL в Docker, `localhost:5434`, схема `public`.
-- **Supabase:** только **Session pooler** (порт 5432) — Transaction pooler (6543) ломает блокировку
-  «одно обновление за раз». Таблицы — в своей схеме `deal_finder`: так они не смешиваются с другими приложениями
+- **Supabase:** в `DATABASE_URL` — **Session pooler** (порт 5432): через него работают worker и миграции,
+  блокировке «одно обновление за раз» нужно постоянное соединение. Сайт на Vercel сам переключается на
+  **Transaction pooler** (6543): у Session pooler всего 15 соединений на проект, а бессерверные функции
+  открывают их много. Таблицы — в своей схеме `deal_finder`: так они не смешиваются с другими приложениями
   проекта и не попадают в публичный Data API Supabase. Соединение проверяется корневым сертификатом Supabase
   из `certs/`. Пример строки — в `.env.example`; после смены адреса выполните `npm run db:migrate`.
 
@@ -79,6 +81,7 @@ npm run worker              # в отдельном терминале: фоно
 | --- | --- | --- |
 | `DATABASE_URL` | — | Рабочая БД (обязательна) |
 | `DATABASE_URL_TEST` | — | БД для integration/E2E-тестов |
+| `DATABASE_POOL_MODE` | Vercel: `transaction`, иначе `session` | Режим Supabase pooler (порт 6543 или 5432) |
 | `DATABASE_POOL_MAX` | Vercel: `2`, иначе `5` | Соединений с БД на процесс (у Supabase Session pooler всего 15 на проект) |
 | `ADMIN_TOKEN`, `SESSION_SECRET` | — | Вход в «Управление» (≥ 16 и ≥ 32 символов); без них админка выключена |
 | `SCHEDULED_SOURCES` | `synthetic` | Источники для worker'а через запятую, например `krisha-web` |

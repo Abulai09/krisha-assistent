@@ -1,6 +1,6 @@
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { pgConnectionConfig } from "@/lib/pgConfig";
+import { pgConnectionConfig, urlForPoolMode } from "@/lib/pgConfig";
 
 describe("настройки подключения к БД", () => {
   it("без sslrootcert адрес передаётся как есть", () => {
@@ -24,5 +24,19 @@ describe("настройки подключения к БД", () => {
     expect(() => pgConnectionConfig("postgresql://u:p@h/db?sslmode=verify-full&sslrootcert=certs/missing.crt")).toThrow(
       /ENOENT/,
     );
+  });
+});
+
+describe("режим Supabase pooler", () => {
+  const supabase = "postgresql://u:p@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres?schema=deal_finder";
+
+  it("transaction — порт 6543, session — 5432, остальное в адресе не меняется", () => {
+    expect(urlForPoolMode(supabase, "transaction")).toBe(supabase.replace(":5432/", ":6543/"));
+    expect(urlForPoolMode(supabase.replace(":5432/", ":6543/"), "session")).toBe(supabase);
+  });
+
+  it("не-Supabase адрес (локальный PostgreSQL) не трогается", () => {
+    const local = "postgresql://u:p@localhost:5434/deal_finder?schema=public";
+    expect(urlForPoolMode(local, "transaction")).toBe(local);
   });
 });

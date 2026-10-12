@@ -9,6 +9,11 @@ const envSchema = z.object({
    * Vercel), поэтому по умолчанию: на Vercel — 2, иначе 5 (worker: 4 параллельных записи + блокировка — отдельно).
    */
   DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(20).optional(),
+  /**
+   * Режим Supabase pooler: session (5432, нужен worker'у) или transaction (6543, для Vercel).
+   * По умолчанию: на Vercel — transaction, иначе — session. На не-Supabase адреса не влияет.
+   */
+  DATABASE_POOL_MODE: z.enum(["session", "transaction"]).optional(),
   /** Vercel выставляет VERCEL=1 в своих функциях. */
   VERCEL: z.string().optional(),
   ADMIN_TOKEN: z.string().optional(),
@@ -57,9 +62,17 @@ export function scheduledSourceKeys(): string[] {
     .filter(Boolean);
 }
 
-/** Настройки пула соединений: на Vercel — мало соединений и быстрое закрытие простаивающих. */
-export function databasePoolSettings(): { max: number; idleTimeoutMillis: number } {
-  const { DATABASE_POOL_MAX, VERCEL } = getEnv();
+/** Настройки пула: на Vercel — transaction pooler, мало соединений и быстрое закрытие простаивающих. */
+export function databasePoolSettings(): {
+  mode: "session" | "transaction";
+  max: number;
+  idleTimeoutMillis: number;
+} {
+  const { DATABASE_POOL_MAX, DATABASE_POOL_MODE, VERCEL } = getEnv();
   const serverless = Boolean(VERCEL);
-  return { max: DATABASE_POOL_MAX ?? (serverless ? 2 : 5), idleTimeoutMillis: serverless ? 10_000 : 30_000 };
+  return {
+    mode: DATABASE_POOL_MODE ?? (serverless ? "transaction" : "session"),
+    max: DATABASE_POOL_MAX ?? (serverless ? 2 : 5),
+    idleTimeoutMillis: serverless ? 10_000 : 30_000,
+  };
 }

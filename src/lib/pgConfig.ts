@@ -27,3 +27,21 @@ export function pgConnectionConfig(url: string, readFile: (file: string) => stri
 function readUtf8(file: string): string {
   return readFileSync(file, "utf8");
 }
+
+export type PoolMode = "session" | "transaction";
+
+const SUPABASE_POOLER_HOST = /\.pooler\.supabase\.com$/;
+const SUPABASE_PORTS: Record<PoolMode, string> = { session: "5432", transaction: "6543" };
+
+/**
+ * Адрес Supabase pooler под нужный режим (у Supabase они различаются только портом).
+ * session (5432) — держит соединение за клиентом: нужен worker'у (advisory lock), но всего 15 клиентов на проект.
+ * transaction (6543) — соединение только на время запроса: для бессерверных функций Vercel.
+ * Другие хосты (локальный PostgreSQL) не трогаем.
+ */
+export function urlForPoolMode(url: string, mode: PoolMode): string {
+  const parsed = new URL(url);
+  if (!SUPABASE_POOLER_HOST.test(parsed.hostname)) return url;
+  parsed.port = SUPABASE_PORTS[mode];
+  return parsed.toString();
+}

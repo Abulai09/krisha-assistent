@@ -59,7 +59,8 @@ integration и E2E берут `DATABASE_URL_TEST` (БД создаёт `docker/i
   Каждое чтение БД/`searchParams`/`params`/`usePathname` — внутри `<Suspense>`; серверные компоненты с данными
   начинаются с `await connection()`. В конфиге `serverActions` лежит в `experimental`.
 - Схема БД берётся из `?schema=` в `DATABASE_URL` (`databaseSchema()` в `src/lib/db.ts`); сырой SQL пишется без
-  имени схемы — его находит `search_path`. Supabase — только Session pooler (advisory lock сессионный).
+  имени схемы — его находит `search_path`. Supabase: worker/миграции — Session pooler (advisory lock сессионный),
+  сайт на Vercel — Transaction pooler (`DATABASE_POOL_MODE`, `urlForPoolMode()` в `src/lib/pgConfig.ts`).
 - Prisma 7: клиент генерируется в `src/generated/prisma` (импорт `@/generated/prisma/client`), подключение через
   `@prisma/adapter-pg`, URL — в `prisma.config.ts`.
 - Каждый Server Action админки начинается с `requireAdmin()` (внутри `guarded()` в `src/app/admin/actions.ts`).

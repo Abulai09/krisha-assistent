@@ -1,6 +1,6 @@
 import { Client } from "pg";
-import { getEnv } from "@/config/env";
-import { pgConnectionConfig } from "@/lib/pgConfig";
+import { databasePoolSettings, getEnv } from "@/config/env";
+import { pgConnectionConfig, urlForPoolMode } from "@/lib/pgConfig";
 
 /**
  * Блокировка «одно задание за раз» через pg_try_advisory_lock.
@@ -18,7 +18,11 @@ export interface HeldLock {
 }
 
 export async function tryAcquireLock(key: number): Promise<HeldLock | null> {
-  const client = new Client(pgConnectionConfig(getEnv().DATABASE_URL));
+  // Сессионная блокировка в transaction pooler не держится — там соединение отдаётся другим клиентам после запроса.
+  if (databasePoolSettings().mode === "transaction") {
+    throw new Error("Блокировка обновлений требует DATABASE_POOL_MODE=session (Supabase Session pooler)");
+  }
+  const client = new Client(pgConnectionConfig(urlForPoolMode(getEnv().DATABASE_URL, "session")));
   await client.connect();
   try {
     const result = await client.query<{ locked: boolean }>("SELECT pg_try_advisory_lock($1) AS locked", [key]);
